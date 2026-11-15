@@ -372,7 +372,7 @@ private fun TerminalWebView(
                 settings.javaScriptEnabled = true
                 settings.allowFileAccess = false
                 settings.allowContentAccess = false
-                setBackgroundColor(0xFF14161C.toInt())
+                setBackgroundColor(0xFF000000.toInt())
                 val web = this
                 addJavascriptInterface(object {
                     @JavascriptInterface fun onInput(d: String) = onInput(d)

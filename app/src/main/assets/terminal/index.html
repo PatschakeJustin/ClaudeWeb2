@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <link rel="stylesheet" href="xterm.css">
 <style>
-  html, body { margin: 0; height: 100%; background: #14161c; overflow: hidden; }
+  html, body { margin: 0; height: 100%; background: #000000; overflow: hidden; }
   #term { position: absolute; inset: 0; padding: 4px 4px 0 6px; }
 </style>
 </head>
@@ -25,7 +25,7 @@
     fontSize: 13,
     cursorBlink: true,
     scrollback: 10000,
-    theme: { background: '#14161c', foreground: '#e6e6e6', cursor: '#d97757' },
+    theme: { background: '#000000', foreground: '#f2e6d9', cursor: '#ff9c3d', selectionBackground: '#cc99cc66' },
   });
   const fit = new FitClass();
   term.loadAddon(fit);
