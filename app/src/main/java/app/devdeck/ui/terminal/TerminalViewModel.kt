@@ -67,17 +67,6 @@ class TerminalViewModel(private val container: AppContainer) : ViewModel() {
 
     private var shell: ShellSession? = null
 
-    init {
-        // Requests from other screens, e.g. "log in to Claude Code on this server".
-        viewModelScope.launch {
-            container.terminalRequests.collect { req ->
-                if (req != null) {
-                    container.terminalRequests.value = null
-                    container.connections.state.value.ssh.firstOrNull { it.id == req.connectionId }?.let { connect(it, req.input, req.logins) }
-                }
-            }
-        }
-    }
     private var cols = 80
     private var rows = 24
 
@@ -96,7 +85,7 @@ class TerminalViewModel(private val container: AppContainer) : ViewModel() {
 
     private fun output(data: ByteArray): Unit = synchronized(lock) {
         lastOutputAt = System.currentTimeMillis()
-        scanForLogin(data)
+        appendForScan(data)
         if (buffer.size() > MAX_BUFFER) {
             val keep = buffer.toByteArray().let { it.copyOfRange(it.size - MAX_BUFFER / 2, it.size) }
             buffer.reset(); buffer.write(keep)
@@ -113,7 +102,7 @@ class TerminalViewModel(private val container: AppContainer) : ViewModel() {
         currentConn = conn
         followUpJob?.cancel()
         _login.value = if (logins.isEmpty()) null else LoginState(logins, 0)
-        synchronized(lock) { scan.clear() }
+        synchronized(scanLock) { scan.clear() }
         _detected.value = Detected()
         synchronized(lock) { buffer.reset() }
         sink?.invoke("\u001bc".toByteArray()) // reset the visible terminal
@@ -176,14 +165,33 @@ class TerminalViewModel(private val container: AppContainer) : ViewModel() {
 
     // While logging in the server sees a very wide terminal, so long login links arrive on one line
     // (xterm wraps them only visually) and can be detected and opened.
-    private fun ptyCols() = if (_login.value != null) LOGIN_COLS else cols
+    private fun ptyCols() = cols
 
-    private fun scanForLogin(data: ByteArray) {
-        // Keep the raw output and evaluate it as a whole: escape sequences and URLs may be split across chunks,
-        // TUIs wrap long links themselves, and OSC 8 hyperlinks carry the full address.
-        scan.append(data.toString(Charsets.UTF_8))
-        if (scan.length > 64_000) scan.delete(0, scan.length - 32_000)
-        val raw = scan.toString()
+    // Login-link detection runs throttled on a background thread. It must never block the output path:
+    // TUIs redraw many times per second and the UI thread waits on [lock] when attaching the view.
+    private val scanLock = Any()
+    @Volatile private var scanDirty = false
+    private var scanJob: Job? = null
+
+    private fun appendForScan(data: ByteArray) {
+        synchronized(scanLock) {
+            scan.append(data.toString(Charsets.UTF_8))
+            if (scan.length > 24_000) scan.delete(0, scan.length - 16_000)
+        }
+        scanDirty = true
+        if (scanJob?.isActive != true) {
+            scanJob = viewModelScope.launch(Dispatchers.Default) {
+                while (scanDirty) {
+                    scanDirty = false
+                    delay(400)
+                    runCatching { scanForLogin() }
+                }
+            }
+        }
+    }
+
+    private fun scanForLogin() {
+        val raw = synchronized(scanLock) { scan.toString() }
         val guided = _login.value != null
         val url = pickLoginUrl(extractLoginUrls(raw, anyUrl = guided))
         val plain = if (guided) stripTerminalCodes(raw) else ""
@@ -224,7 +232,7 @@ class TerminalViewModel(private val container: AppContainer) : ViewModel() {
         val step = st.steps[index]
         val conn = currentConn ?: return
         autoNextJob?.cancel()
-        synchronized(lock) { scan.clear() }
+        synchronized(scanLock) { scan.clear() }
         _detected.value = Detected()
         _login.value = st.copy(index = index, done = false)
         followUpJob?.cancel()
@@ -297,8 +305,21 @@ class TerminalViewModel(private val container: AppContainer) : ViewModel() {
         disconnect()
     }
 
+    // Must stay the LAST declaration: the collector may run immediately (Main.immediate) and call connect(),
+    // which needs every field above to be initialised. (Placed earlier it crashed with a NullPointerException.)
+    init {
+        // Requests from other screens, e.g. "log in to Claude Code on this server".
+        viewModelScope.launch {
+            container.terminalRequests.collect { req ->
+                if (req != null) {
+                    container.terminalRequests.value = null
+                    container.connections.state.value.ssh.firstOrNull { it.id == req.connectionId }?.let { connect(it, req.input, req.logins) }
+                }
+            }
+        }
+    }
+
     companion object {
         private const val MAX_BUFFER = 1 shl 20
-        private const val LOGIN_COLS = 500
     }
 }

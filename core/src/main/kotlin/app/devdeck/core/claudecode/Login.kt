@@ -10,6 +10,21 @@ val LOGIN_STATUS_SCRIPT: String = CLAUDE_PATH_PREFIX + "export PATH=\"\$HOME/.lo
     "command -v qwen >/dev/null 2>&1 && echo 'HAS qwen'; [ -f \"\$HOME/.qwen/oauth_creds.json\" ] && echo 'AUTH qwen'; " +
     "command -v codex >/dev/null 2>&1 && echo 'HAS codex'; [ -f \"\$HOME/.codex/auth.json\" ] && echo 'AUTH codex'; true"
 
+/** Install/login state of one tool on a server. */
+data class ToolStatus(val id: String, val label: String, val installed: Boolean, val loggedIn: Boolean)
+
+private val TOOLS = listOf("claude" to "Claude Code", "gemini" to "Gemini CLI", "qwen" to "Qwen Code", "codex" to "Codex CLI")
+
+/** Parses [LOGIN_STATUS_SCRIPT] output into one entry per known tool. */
+fun toolStatus(statusOutput: String): List<ToolStatus> {
+    val lines = statusOutput.lines().map { it.trim() }.toSet()
+    return TOOLS.map { (id, label) -> ToolStatus(id, label, "HAS $id" in lines, "AUTH $id" in lines) }
+}
+
+/** Login step for a single tool (re-login if it is already logged in). */
+fun loginStepFor(status: ToolStatus): LoginStep? = if (!status.installed) null else
+    loginSteps("HAS ${status.id}\n" + if (status.loggedIn) "AUTH ${status.id}\n" else "").firstOrNull()
+
 /** Builds the login sequence for everything installed on the server. Already logged-in tools are logged in again. */
 fun loginSteps(statusOutput: String): List<LoginStep> {
     val lines = statusOutput.lines().map { it.trim() }.toSet()

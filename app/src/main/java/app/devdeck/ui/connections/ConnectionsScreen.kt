@@ -93,6 +93,7 @@ fun ConnectionsScreen(navigate: (Dest) -> Unit) {
     var addMenu by remember { mutableStateOf(false) }
     var setup by remember { mutableStateOf<SshConnection?>(null) }
     var setupOpen by remember { mutableStateOf(false) }
+    var statusFor by remember { mutableStateOf<SshConnection?>(null) }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val settings by container.settings.state.collectAsState()
@@ -211,6 +212,7 @@ fun ConnectionsScreen(navigate: (Dest) -> Unit) {
                                 },
                                 onSetup = { setup = c; setupOpen = true },
                                 onEdit = { editing = c },
+                                onStatus = { statusFor = c },
                             )
                         },
                     ) { editing = c }
@@ -248,6 +250,9 @@ fun ConnectionsScreen(navigate: (Dest) -> Unit) {
         )
     }
     if (setupOpen) ServerSetupDialog(container, setup, navigate) { setupOpen = false }
+    statusFor?.let { c ->
+        ServerStatusDialog(container, c, navigate, onInstall = { setup = c; setupOpen = true }) { statusFor = null }
+    }
 }
 
 private fun <T> androidx.compose.foundation.lazy.LazyListScope.section(title: String, list: List<T>, row: @Composable (T) -> Unit) {
@@ -260,11 +265,12 @@ private fun <T> androidx.compose.foundation.lazy.LazyListScope.section(title: St
 }
 
 @Composable
-private fun SshMenu(onTerminal: () -> Unit, onRelogin: () -> Unit, onSetup: () -> Unit, onEdit: () -> Unit) {
+private fun SshMenu(onTerminal: () -> Unit, onRelogin: () -> Unit, onSetup: () -> Unit, onEdit: () -> Unit, onStatus: () -> Unit) {
     var open by remember { mutableStateOf(false) }
     Box {
         IconButton(onClick = { open = true }) { Icon(Icons.Filled.MoreVert, "Aktionen") }
         DropdownMenu(open, onDismissRequest = { open = false }) {
+            DropdownMenuItem(text = { Text("Anmeldestatus / anmelden …") }, onClick = { open = false; onStatus() })
             DropdownMenuItem(text = { Text("Terminal (neu) starten") }, onClick = { open = false; onTerminal() })
             DropdownMenuItem(text = { Text("Alle neu anmelden") }, onClick = { open = false; onRelogin() })
             DropdownMenuItem(text = { Text("Claude Code & KIs installieren …") }, onClick = { open = false; onSetup() })

@@ -102,3 +102,14 @@ class LoginSuccessTest {
         }
     }
 }
+
+class ToolStatusTest {
+    @Test fun parsesStatus() {
+        val st = app.devdeck.core.claudecode.toolStatus("HAS claude\nAUTH claude\nHAS gemini\n")
+        assertEquals(listOf(true, true, false, false), st.map { it.installed })
+        assertEquals(listOf(true, false, false, false), st.map { it.loggedIn })
+        assertEquals("/login\r", app.devdeck.core.claudecode.loginStepFor(st[0])!!.followUp)
+        assertNull(app.devdeck.core.claudecode.loginStepFor(st[1])!!.followUp)
+        assertNull(app.devdeck.core.claudecode.loginStepFor(st[2]))
+    }
+}

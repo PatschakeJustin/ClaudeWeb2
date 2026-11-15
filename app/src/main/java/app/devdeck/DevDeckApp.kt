@@ -33,8 +33,26 @@ class DevDeckApp : Application() {
         // Android ships a stripped-down "BC" provider; sshj needs the full BouncyCastle.
         Security.removeProvider(BouncyCastleProvider.PROVIDER_NAME)
         Security.insertProviderAt(BouncyCastleProvider(), 1)
+        installCrashRecorder()
         container = AppContainer(this)
     }
+
+    /** Writes the stack trace of a crash to a file; the app shows it on the next start so it can be sent in. */
+    private fun installCrashRecorder() {
+        val previous = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { thread, error ->
+            runCatching {
+                java.io.File(filesDir, CRASH_FILE).writeText(
+                    "Humantize DevApp ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE}), " +
+                        "Android ${android.os.Build.VERSION.RELEASE}, ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}\n" +
+                        "Thread: ${thread.name}\n\n" + error.stackTraceToString()
+                )
+            }
+            previous?.uncaughtException(thread, error)
+        }
+    }
+
+    companion object { const val CRASH_FILE = "last_crash.txt" }
 }
 
 data class TerminalRequest(
