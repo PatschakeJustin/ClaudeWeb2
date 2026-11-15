@@ -18,6 +18,7 @@ import app.devdeck.data.SecureStore
 import app.devdeck.data.SettingsRepository
 import app.devdeck.data.Updater
 import app.devdeck.data.ServerBackup
+import app.devdeck.ui.terminal.TerminalViewModel
 import com.anthropic.client.AnthropicClient
 import com.anthropic.client.okhttp.AnthropicOkHttpClient
 import okhttp3.OkHttpClient
@@ -62,7 +63,7 @@ data class TerminalRequest(
     val logins: List<LoginStep> = emptyList(),
 )
 
-class AppContainer(app: Application) {
+class AppContainer(private val app: Application) {
     private val secure = SecureStore(app)
     val connections = ConnectionsRepository(secure)
     val settings = SettingsRepository(secure)
@@ -76,6 +77,9 @@ class AppContainer(app: Application) {
     val aiClient = OpenAiCompatClient(http, ssh) { id -> connections.state.value.ssh.firstOrNull { it.id == id } }
 
     fun newSelfHostedSession(aiId: String) = SelfHostedSession(aiClient) { connections.state.value.ai.firstOrNull { it.id == aiId } }
+
+    /** The terminal session lives as long as the app process (not tied to a screen). */
+    val terminal: TerminalViewModel by lazy { TerminalViewModel(this, app) }
 
     /** Lets other screens ask the terminal to connect to a server and type something (e.g. `claude`). */
     val terminalRequests = MutableStateFlow<TerminalRequest?>(null)

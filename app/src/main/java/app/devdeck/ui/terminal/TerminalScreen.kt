@@ -9,6 +9,7 @@ import android.net.Uri
 import android.widget.Toast
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.filled.Link
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
 import kotlinx.coroutines.launch
 import androidx.compose.ui.platform.LocalContext
@@ -61,13 +62,24 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import app.devdeck.ui.Dest
-import app.devdeck.ui.common.containerViewModel
+import app.devdeck.ui.appContainer
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import app.devdeck.ui.theme.MonoFamily
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TerminalScreen(navigate: (Dest) -> Unit) {
-    val vm = containerViewModel { TerminalViewModel(it) }
+    val vm = appContainer().terminal
+    // Android 13+: allow the "Terminal verbunden" notification of the keep-alive service.
+    val permContext = LocalContext.current
+    val notifPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {}
+    LaunchedEffect(Unit) {
+        if (android.os.Build.VERSION.SDK_INT >= 33 &&
+            androidx.core.content.ContextCompat.checkSelfPermission(permContext, android.Manifest.permission.POST_NOTIFICATIONS) !=
+            android.content.pm.PackageManager.PERMISSION_GRANTED
+        ) notifPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+    }
     val status by vm.status.collectAsState()
     val connections by vm.connections.collectAsState()
     val settings by vm.settings.collectAsState()
@@ -135,6 +147,7 @@ fun TerminalScreen(navigate: (Dest) -> Unit) {
                 IconButton(onClick = { vm.setFontSize(settings.terminalFontSize - 1) }) { Icon(Icons.Filled.TextDecrease, "Kleiner") }
                 IconButton(onClick = { vm.setFontSize(settings.terminalFontSize + 1) }) { Icon(Icons.Filled.TextIncrease, "Größer") }
                 if (connected) IconButton(onClick = vm::disconnect) { Icon(Icons.Filled.LinkOff, "Trennen") }
+                if (status is TerminalViewModel.Status.Closed) IconButton(onClick = vm::reconnect) { Icon(Icons.Filled.Refresh, "Neu verbinden") }
                 Box {
                     IconButton(onClick = { menuOpen = true }) { Icon(Icons.Filled.MoreVert, "Mehr") }
                     DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {

@@ -101,6 +101,14 @@ fun SettingsScreen() {
             ) { v -> repo.update { it.copy(refusalFallback = v) } }
 
             HorizontalDivider()
+            Text("Terminal", style = MaterialTheme.typography.titleMedium)
+            SwitchRow(
+                "Sitzung mit tmux erhalten",
+                "Das Terminal läuft auf dem Server in tmux. Reißt die Verbindung ab, verbindet die App neu und du bist wieder genau dort, wo du warst (z. B. in Claude Code).",
+                s.terminalTmux,
+            ) { v -> repo.update { it.copy(terminalTmux = v) } }
+
+            HorizontalDivider()
             Text("Updates", style = MaterialTheme.typography.titleMedium)
             SwitchRow(
                 "Beim Start nach Updates suchen",

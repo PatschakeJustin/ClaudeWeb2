@@ -50,6 +50,8 @@ data class AppSettings(
     val autoUpdateCheck: Boolean = true,
     /** Text file (content URI) that always holds a copy of the servers; null = off. */
     val backupUri: String? = null,
+    /** Run terminal sessions inside tmux on the server so they survive disconnects. */
+    val terminalTmux: Boolean = true,
 ) {
     companion object {
         const val MODE_CLAUDE_CODE = "claude_code"

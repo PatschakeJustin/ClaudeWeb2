@@ -1,8 +1,10 @@
 package app.devdeck.ui.terminal
 
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.viewModelScope
+import android.content.Context
 import app.devdeck.AppContainer
+import app.devdeck.TerminalService
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
 import app.devdeck.core.model.SshConnection
 import app.devdeck.core.ssh.ShellSession
 import kotlinx.coroutines.Dispatchers
@@ -24,7 +26,13 @@ import app.devdeck.core.claudecode.loginSteps
 import app.devdeck.core.claudecode.stripTerminalCodes
 import java.io.ByteArrayOutputStream
 
-class TerminalViewModel(private val container: AppContainer) : ViewModel() {
+/**
+ * The terminal session. Owned by the app (not by a screen), so it survives leaving the app, screen changes and
+ * rebuilt activities; a foreground service keeps the process alive while connected.
+ */
+class TerminalViewModel(private val container: AppContainer, private val appContext: Context) {
+    private val viewModelScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+
     sealed interface Status {
         data object Idle : Status
         data class Connecting(val name: String) : Status
@@ -97,54 +105,113 @@ class TerminalViewModel(private val container: AppContainer) : ViewModel() {
 
     private fun local(text: String) = output(text.replace("\n", "\r\n").toByteArray())
 
-    fun connect(conn: SshConnection, initialInput: String? = null, logins: List<LoginStep> = emptyList()) {
-        disconnect()
+    @Volatile private var userClosed = false
+    private var reconnectJob: Job? = null
+
+    fun connect(conn: SshConnection, initialInput: String? = null, logins: List<LoginStep> = emptyList()) =
+        open(conn, initialInput, logins, reconnect = false)
+
+    private fun open(conn: SshConnection, initialInput: String?, logins: List<LoginStep>, reconnect: Boolean) {
+        if (!reconnect) reconnectJob?.cancel()
+        closeShell()
+        userClosed = false
         currentConn = conn
         followUpJob?.cancel()
         _login.value = if (logins.isEmpty()) null else LoginState(logins, 0)
         synchronized(scanLock) { scan.clear() }
         _detected.value = Detected()
-        synchronized(lock) { buffer.reset() }
-        sink?.invoke("\u001bc".toByteArray()) // reset the visible terminal
+        if (!reconnect) {
+            synchronized(lock) { buffer.reset() }
+            sink?.invoke("\u001bc".toByteArray()) // reset the visible terminal
+        }
         _status.value = Status.Connecting(conn.name)
-        local("Verbinde mit ${conn.username}@${conn.host}:${conn.port} …\n")
+        local(if (reconnect) "\n[Verbinde neu mit ${conn.name} …]\n" else "Verbinde mit ${conn.username}@${conn.host}:${conn.port} …\n")
+        TerminalService.start(appContext, conn.name)
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                shell = openShellFor(conn)
+                shell = openShellFor(conn, plain = logins.isEmpty(), fresh = reconnect)
                 _status.value = Status.Connected(conn.name)
+                TerminalService.start(appContext, conn.name)
+                // Plain sessions run inside tmux on the server: if the connection drops, reconnecting
+                // brings back exactly the same session (including a running Claude Code).
+                if (logins.isEmpty() && !conn.windows && container.settings.state.value.terminalTmux) {
+                    shell?.write("command -v tmux >/dev/null 2>&1 && exec tmux new -A -s humantize\r")
+                    if (initialInput != null) delay(800)
+                }
                 if (initialInput != null) shell?.write(initialInput)
                 if (logins.isNotEmpty()) startStep(0)
             } catch (e: Exception) {
                 local("Fehler: ${e.message ?: e.javaClass.simpleName}\n")
                 _status.value = Status.Closed(conn.name, e.message)
+                if (reconnect) scheduleReconnect(conn) else TerminalService.stop(appContext)
             }
         }
     }
 
+    /** After an unexpected disconnect: retry a few times with growing pauses. */
+    private fun scheduleReconnect(conn: SshConnection) {
+        if (userClosed) return
+        val attempt = reconnectAttempts++
+        if (attempt >= RECONNECT_DELAYS.size) {
+            local("\n[Neuverbindung aufgegeben – oben den Server erneut wählen]\n")
+            TerminalService.stop(appContext)
+            return
+        }
+        reconnectJob = viewModelScope.launch {
+            delay(RECONNECT_DELAYS[attempt])
+            if (!userClosed && currentConn?.id == conn.id) open(conn, null, emptyList(), reconnect = true)
+        }
+    }
+
+    private var reconnectAttempts = 0
+
     // Each shell gets a generation number; events of an old shell (closed on purpose) are ignored.
     @Volatile private var generation = 0
 
-    private suspend fun openShellFor(conn: SshConnection): ShellSession {
+    private suspend fun openShellFor(conn: SshConnection, plain: Boolean = true, fresh: Boolean = false): ShellSession {
         val gen = ++generation
-        return container.ssh.openShell(conn, ptyCols(), rows, object : ShellSession.Listener {
+        // After a drop the cached SSH client may be half-dead (network change): start from a fresh connection.
+        if (fresh) container.ssh.disconnect(conn.id)
+        val session = container.ssh.openShell(conn, ptyCols(), rows, object : ShellSession.Listener {
             override fun onOutput(data: ByteArray) { if (gen == generation) output(data) }
             override fun onClosed(error: Throwable?) {
                 if (gen != generation) return
                 local("\n[Verbindung beendet${error?.message?.let { ": $it" } ?: ""}]\n")
                 _status.value = Status.Closed(conn.name, error?.message)
+                if (!userClosed && plain && _login.value == null) scheduleReconnect(conn) else TerminalService.stop(appContext)
             }
         })
+        reconnectAttempts = 0
+        return session
     }
 
-    fun disconnect() {
-        shell?.close()
+    private fun closeShell() {
+        val old = shell ?: return
         shell = null
+        generation++
+        // Network I/O must not run on the main thread (it would fail and leave the remote shell open).
+        viewModelScope.launch(Dispatchers.IO) { runCatching { old.close() } }
+    }
+
+    /** Connects again to the last server (after a disconnect). */
+    fun reconnect() { currentConn?.let { connect(it) } }
+
+    /** Disconnect on purpose (button, notification): no automatic reconnect. */
+    fun disconnect() {
+        userClosed = true
+        reconnectJob?.cancel()
+        followUpJob?.cancel()
+        closeShell()
+        currentConn?.let { _status.value = Status.Closed(it.name, null) }
+        local("\n[Getrennt]\n")
+        TerminalService.stop(appContext)
     }
 
     fun onResize(c: Int, r: Int) {
         if (c <= 0 || r <= 0) return
         cols = c; rows = r
-        shell?.resize(ptyCols(), r)
+        val s = shell ?: return
+        viewModelScope.launch(Dispatchers.IO) { s.resize(c, r) }
     }
 
     /** Input from the terminal view (keyboard). Applies the sticky Ctrl key. */
@@ -163,8 +230,6 @@ class TerminalViewModel(private val container: AppContainer) : ViewModel() {
         viewModelScope.launch(Dispatchers.IO) { runCatching { s.write(text) } }
     }
 
-    // While logging in the server sees a very wide terminal, so long login links arrive on one line
-    // (xterm wraps them only visually) and can be detected and opened.
     private fun ptyCols() = cols
 
     // Login-link detection runs throttled on a background thread. It must never block the output path:
@@ -243,7 +308,7 @@ class TerminalViewModel(private val container: AppContainer) : ViewModel() {
                     val old = shell
                     shell = null
                     generation++
-                    runCatching { old?.close() }
+                    runCatching { old?.close() }  // already on Dispatchers.IO
                     local("\n\n── ${step.label} (${index + 1}/${st.steps.size}) ──\n")
                     shell = openShellFor(conn)
                 } else {
@@ -276,7 +341,6 @@ class TerminalViewModel(private val container: AppContainer) : ViewModel() {
         followUpJob?.cancel()
         autoNextJob?.cancel()
         _login.value = null
-        shell?.resize(cols, rows)
         _messages.tryEmit("Anmeldung beendet. Claude Code und Gemini/Qwen mit /exit bzw. Ctrl-C zweimal verlassen.")
     }
 
@@ -301,10 +365,6 @@ class TerminalViewModel(private val container: AppContainer) : ViewModel() {
 
     fun setFontSize(size: Int) = container.settings.update { it.copy(terminalFontSize = size.coerceIn(8, 28)) }
 
-    override fun onCleared() {
-        disconnect()
-    }
-
     // Must stay the LAST declaration: the collector may run immediately (Main.immediate) and call connect(),
     // which needs every field above to be initialised. (Placed earlier it crashed with a NullPointerException.)
     init {
@@ -321,5 +381,6 @@ class TerminalViewModel(private val container: AppContainer) : ViewModel() {
 
     companion object {
         private const val MAX_BUFFER = 1 shl 20
+        private val RECONNECT_DELAYS = longArrayOf(1_000, 3_000, 6_000, 12_000, 25_000, 45_000)
     }
 }
