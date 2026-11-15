@@ -2,6 +2,8 @@ package app.devdeck
 
 import android.app.Application
 import app.devdeck.core.agent.AgentToolbox
+import app.devdeck.core.ai.OpenAiCompatClient
+import app.devdeck.core.ai.SelfHostedSession
 import app.devdeck.core.agent.ClaudeAgent
 import app.devdeck.core.claudecode.ClaudeCodePermission
 import app.devdeck.core.claudecode.CliAgent
@@ -42,6 +44,10 @@ class AppContainer(app: Application) {
     val http = OkHttpClient()
     val ssh = SshManager(knownHosts)
     val toolbox = AgentToolbox({ connections.state.value }, ssh, http)
+
+    val aiClient = OpenAiCompatClient(http, ssh) { id -> connections.state.value.ssh.firstOrNull { it.id == id } }
+
+    fun newSelfHostedSession(aiId: String) = SelfHostedSession(aiClient) { connections.state.value.ai.firstOrNull { it.id == aiId } }
 
     /** Lets other screens ask the terminal to connect to a server and type something (e.g. `claude`). */
     val terminalRequests = MutableStateFlow<TerminalRequest?>(null)

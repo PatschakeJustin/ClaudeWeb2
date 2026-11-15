@@ -87,8 +87,7 @@ class CliAgentTest {
 
     @Test fun commandsAndScripts() {
         assertContains(CliAgent.CODEX.runCommand(ClaudeCodePermission.PLAN, ""), "--sandbox read-only")
-        assertEquals("ollama run 'qwen2.5-coder:7b' \"\$DEVDECK_PROMPT\"", CliAgent.OLLAMA.runCommand(ClaudeCodePermission.EDIT, "qwen2.5-coder:7b"))
-        assertEquals(setOf(CliAgent.GEMINI, CliAgent.OLLAMA), parseTools("HAS gemini\nfoo\nHAS ollama\n"))
+        assertEquals(setOf(CliAgent.GEMINI, CliAgent.CODEX), parseTools("HAS gemini\nfoo\nHAS codex\n"))
         // The generated installer must be valid POSIX shell.
         val script = Files.createTempFile("setup", ".sh")
         Files.writeString(script, setupScript(true, CliAgent.entries))

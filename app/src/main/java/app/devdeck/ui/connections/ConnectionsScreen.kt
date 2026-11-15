@@ -61,7 +61,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import app.devdeck.AppContainer
+import app.devdeck.core.model.AiServerConnection
 import app.devdeck.core.model.Connection
+import androidx.compose.material.icons.filled.Memory
 import app.devdeck.core.model.NextcloudConnection
 import app.devdeck.core.model.RdpConnection
 import app.devdeck.core.model.SshConnection
@@ -116,6 +118,10 @@ fun ConnectionsScreen(navigate: (Dest) -> Unit) {
                 section("Nextcloud", store.nextcloud) { c ->
                     ConnectionRow(Icons.Filled.Cloud, c.name, "${c.username} · ${c.baseUrl}") { editing = c }
                 }
+                section("Selfhosted KI-Server", store.ai) { c ->
+                    ConnectionRow(Icons.Filled.Memory, c.name, "${c.model.ifBlank { "kein Modell" }} · ${c.baseUrl}" +
+                        (store.ssh.firstOrNull { it.id == c.tunnelSshId }?.let { " · Tunnel über ${it.name}" } ?: "")) { editing = c }
+                }
                 section("Remote Desktop (RDP)", store.rdp) { c ->
                     ConnectionRow(
                         Icons.Filled.DesktopWindows, c.name, "${c.host}:${c.port}",
@@ -130,6 +136,7 @@ fun ConnectionsScreen(navigate: (Dest) -> Unit) {
                 DropdownMenuItem(text = { Text("SSH-Server") }, onClick = { addMenu = false; editing = SshConnection(name = "", host = "", username = "root") })
                 DropdownMenuItem(text = { Text("Nextcloud") }, onClick = { addMenu = false; editing = NextcloudConnection(name = "", baseUrl = "https://", username = "", appPassword = "") })
                 DropdownMenuItem(text = { Text("Remote Desktop (RDP)") }, onClick = { addMenu = false; editing = RdpConnection(name = "", host = "") })
+                DropdownMenuItem(text = { Text("Selfhosted KI-Server") }, onClick = { addMenu = false; editing = AiServerConnection(name = "") })
             }
         }
     }
@@ -216,6 +223,12 @@ private fun EditDialog(
                         "✓ Verbunden, $n Einträge im Hauptordner"
                     }
                     is RdpConnection -> "RDP wird in der externen App getestet."
+                    is AiServerConnection -> {
+                        val models = container.aiClient.listModels(d)
+                        if (models.isEmpty()) "✓ Erreichbar, aber keine Modelle installiert"
+                        else "✓ Erreichbar. Modelle: " + models.joinToString(", ") +
+                            (if (d.model.isNotBlank() && d.model !in models) "\n⚠ '${d.model}' ist nicht dabei" else "")
+                    }
                 }
             } catch (e: Exception) {
                 "✗ " + (e.message ?: e.javaClass.simpleName)
@@ -235,6 +248,7 @@ private fun EditDialog(
                         is SshConnection -> "SSH-Verbindung"
                         is NextcloudConnection -> "Nextcloud-Verbindung"
                         is RdpConnection -> "RDP-Verbindung"
+                        is AiServerConnection -> "KI-Server"
                     },
                     style = MaterialTheme.typography.titleLarge,
                 )
@@ -242,6 +256,7 @@ private fun EditDialog(
                     is SshConnection -> SshFields(d) { draft = it }
                     is NextcloudConnection -> NextcloudFields(d) { draft = it }
                     is RdpConnection -> RdpFields(d) { draft = it }
+                    is AiServerConnection -> AiFields(d, container.connections.state.value.ssh) { draft = it }
                 }
 
                 val d = draft
@@ -300,6 +315,33 @@ private fun valid(c: Connection): Boolean = c.name.isNotBlank() && when (c) {
     is SshConnection -> c.host.isNotBlank() && c.username.isNotBlank() && c.port in 1..65535
     is NextcloudConnection -> c.baseUrl.startsWith("http") && c.username.isNotBlank() && c.appPassword.isNotBlank()
     is RdpConnection -> c.host.isNotBlank() && c.port in 1..65535
+    is AiServerConnection -> c.baseUrl.startsWith("http") && c.model.isNotBlank()
+}
+
+@Composable
+private fun AiFields(c: AiServerConnection, sshList: List<SshConnection>, update: (AiServerConnection) -> Unit) {
+    var tunnelMenu by remember { mutableStateOf(false) }
+    Field(c.name, "Name (z. B. Ollama Büro)") { update(c.copy(name = it)) }
+    Field(c.baseUrl, "Adresse (z. B. http://127.0.0.1:11434)") { update(c.copy(baseUrl = it.trim())) }
+    Field(c.model, "Modell (z. B. qwen2.5-coder:7b)") { update(c.copy(model = it.trim())) }
+    Field(c.apiKey, "API-Key (optional)", password = true) { update(c.copy(apiKey = it.trim())) }
+    Box {
+        OutlinedButton(onClick = { tunnelMenu = true }) {
+            Text("SSH-Tunnel: " + (sshList.firstOrNull { it.id == c.tunnelSshId }?.name ?: "keiner (direkt)"))
+        }
+        DropdownMenu(tunnelMenu, onDismissRequest = { tunnelMenu = false }) {
+            DropdownMenuItem(text = { Text("Kein Tunnel – Adresse direkt aufrufen") }, onClick = { tunnelMenu = false; update(c.copy(tunnelSshId = null)) })
+            sshList.forEach { s ->
+                DropdownMenuItem(text = { Text("Über ${s.name} (${s.host})") }, onClick = { tunnelMenu = false; update(c.copy(tunnelSshId = s.id)) })
+            }
+        }
+    }
+    Text(
+        "Mit SSH-Tunnel wird die Adresse vom Server aus aufgerufen – so muss der KI-Port nicht offen im Internet stehen " +
+            "(für Ollama: http://127.0.0.1:11434). Funktioniert mit Ollama, LM Studio, vLLM, LocalAI, llama.cpp und anderen " +
+            "OpenAI-kompatiblen Servern. „Verbindung testen“ zeigt die verfügbaren Modelle.",
+        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
 }
 
 @Composable

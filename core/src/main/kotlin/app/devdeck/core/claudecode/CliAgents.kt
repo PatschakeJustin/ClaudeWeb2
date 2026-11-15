@@ -36,12 +36,6 @@ enum class CliAgent(
         "OpenAI · Anmeldung mit ChatGPT-Konto",
         "npm install -g --prefix \"\$HOME/.local\" @openai/codex", needsNode = true,
         loginCommand = "codex login --device-auth\r",
-    ),
-    OLLAMA(
-        "ollama", "Ollama (lokal)", "ollama",
-        "Open-Source-Modell läuft auf dem Server · ohne Anmeldung, braucht ca. 8 GB RAM",
-        "curl -fsSL https://ollama.com/install.sh | sh && (ollama serve >/dev/null 2>&1 &) ; sleep 3; ollama pull " + OLLAMA_DEFAULT_MODEL,
-        needsNode = false, loginCommand = null,
     );
 
     /** The command line; the prompt is read from the shell variable DEVDECK_PROMPT (filled from stdin). */
@@ -56,7 +50,6 @@ enum class CliAgent(
                 ClaudeCodePermission.EDIT -> " --sandbox workspace-write"
                 ClaudeCodePermission.FULL -> " --full-auto"
             } + " $q"
-            OLLAMA -> "ollama run ${shellQuote(ollamaModel)} $q"
         }
     }
 

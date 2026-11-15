@@ -99,7 +99,8 @@ fun AgentScreen(navigate: (Dest) -> Unit) {
                     Text("Claude")
                     val ccServer = connections.ssh.firstOrNull { it.id == settings.ccConnectionId }?.name
                     Text(
-                        if (settings.agentMode != AppSettings.MODE_API) backendLabel(settings.agentMode) + " · ${ccServer ?: "kein Server"}"
+                        if (runsOnServer(settings.agentMode)) backendLabel(settings.agentMode, connections) + " · ${ccServer ?: "kein Server"}"
+                        else if (settings.agentMode.startsWith(AI_PREFIX)) backendLabel(settings.agentMode, connections) + " · selfhosted"
                         else "API · " + settings.model + " · " + settings.effort,
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -199,7 +200,7 @@ fun AgentScreen(navigate: (Dest) -> Unit) {
 @Composable
 private fun ModeBar(vm: AgentViewModel, settings: AppSettings, connections: ConnectionStore, navigate: (Dest) -> Unit) {
     // All backends except the API one run on the selected server.
-    val cc = settings.agentMode != AppSettings.MODE_API
+    val cc = runsOnServer(settings.agentMode)
     var serverMenu by remember { mutableStateOf(false) }
     var permMenu by remember { mutableStateOf(false) }
     var dirDialog by remember { mutableStateOf(false) }
@@ -213,9 +214,9 @@ private fun ModeBar(vm: AgentViewModel, settings: AppSettings, connections: Conn
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Box {
-            AssistChip(onClick = { modelMenu = true }, label = { Text("Modell: " + backendLabel(settings.agentMode)) })
+            AssistChip(onClick = { modelMenu = true }, label = { Text("Modell: " + backendLabel(settings.agentMode, connections)) })
             DropdownMenu(modelMenu, onDismissRequest = { modelMenu = false }) {
-                BACKENDS.forEach { (id, label) ->
+                backends(connections).forEach { (id, label) ->
                     DropdownMenuItem(text = { Text(label) }, onClick = { modelMenu = false; vm.setMode(id) })
                 }
             }
@@ -223,11 +224,11 @@ private fun ModeBar(vm: AgentViewModel, settings: AppSettings, connections: Conn
         Box {
             AssistChip(
                 onClick = { reserveMenu = true },
-                label = { Text("Reserve: " + (settings.reserveMode.takeIf { it.isNotEmpty() }?.let(::backendLabel) ?: "keine")) },
+                label = { Text("Reserve: " + (settings.reserveMode.takeIf { it.isNotEmpty() }?.let { backendLabel(it, connections) } ?: "keine")) },
             )
             DropdownMenu(reserveMenu, onDismissRequest = { reserveMenu = false }) {
                 DropdownMenuItem(text = { Text("Keine Reserve") }, onClick = { reserveMenu = false; vm.setReserve("") })
-                BACKENDS.filter { it.first != settings.agentMode }.forEach { (id, label) ->
+                backends(connections).filter { it.first != settings.agentMode }.forEach { (id, label) ->
                     DropdownMenuItem(text = { Text(label) }, onClick = { reserveMenu = false; vm.setReserve(id) })
                 }
             }

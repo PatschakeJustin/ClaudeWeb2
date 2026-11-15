@@ -42,6 +42,16 @@ import androidx.compose.ui.window.DialogProperties
 import app.devdeck.AppContainer
 import app.devdeck.TerminalRequest
 import app.devdeck.core.claudecode.CliAgent
+import app.devdeck.core.ai.SUGGESTED_MODELS
+import app.devdeck.core.ai.ollamaLinuxScript
+import app.devdeck.core.ai.ollamaWindowsScript
+import app.devdeck.core.ai.powershellCommand
+import app.devdeck.core.model.AiServerConnection
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import app.devdeck.core.claudecode.setupScript
 import androidx.compose.material3.Checkbox
 import app.devdeck.core.claudecode.STATUS_SCRIPT
@@ -67,7 +77,10 @@ fun ServerSetupDialog(container: AppContainer, initial: SshConnection?, navigate
     var version by remember { mutableStateOf<String?>(null) }
     var loggedIn by remember { mutableStateOf(false) }
     var job by remember { mutableStateOf<Job?>(null) }
-    var installClaude by remember { mutableStateOf(true) }
+    var installClaude by remember { mutableStateOf(initial?.windows != true) }
+    var aiOn by remember { mutableStateOf(false) }
+    var aiModel by remember { mutableStateOf(SUGGESTED_MODELS.first().first) }
+    var aiResult by remember { mutableStateOf<String?>(null) }
     val extras = remember { mutableStateListOf(CliAgent.GEMINI) }
     val installedTools = remember { mutableStateListOf<CliAgent>() }
     val scope = rememberCoroutineScope()
@@ -82,46 +95,81 @@ fun ServerSetupDialog(container: AppContainer, initial: SshConnection?, navigate
         container.ssh.disconnect(c.id)
         log.clear()
         installedTools.clear()
+        aiResult = null
         phase = Phase.RUNNING
-        val withClaude = installClaude
-        val script = setupScript(withClaude, extras.toList())
+        val win = c.windows
+        val withClaude = installClaude && !win
+        val extrasNow = if (win) emptyList() else extras.toList()
+        val withAi = aiOn
+        val model = aiModel.trim()
         job = scope.launch {
             try {
                 log += "Verbinde mit ${c.username}@${c.host}:${c.port} …"
-                val status = parseStatus(container.ssh.exec(c, STATUS_SCRIPT, timeoutSeconds = 30).stdout)
-                if (status.installed) log += "Claude Code ist bereits installiert (${status.version}) – wird aktualisiert."
-                var ok = false
+                var ok = true
                 val toolsFound = java.util.concurrent.CopyOnWriteArrayList<CliAgent>()
-                val exit = container.ssh.execStreaming(c, "sh -s", stdin = script, onStdout = { line ->
-                    val t = line.trim()
-                    when {
-                        t == "DEVDECK_INSTALL_OK" -> ok = true
-                        t == "DEVDECK_LOGGED_IN" -> loggedIn = true
-                        t.startsWith("DEVDECK_TOOL_OK ") -> CliAgent.byId(t.removePrefix("DEVDECK_TOOL_OK "))?.let { a ->
-                            toolsFound += a
-                            scope.launch { installedTools += a; log += "✓ ${a.label} installiert" }
-                        }
-                        t.startsWith("DEVDECK_TOOL_FAIL ") -> CliAgent.byId(t.removePrefix("DEVDECK_TOOL_FAIL "))?.let { a ->
-                            scope.launch { log += "✗ ${a.label} konnte nicht installiert werden" }
-                        }
-                        else -> scope.launch { log += line }
+                if (withClaude || extrasNow.isNotEmpty()) {
+                    if (withClaude) {
+                        val status = parseStatus(container.ssh.exec(c, STATUS_SCRIPT, timeoutSeconds = 30).stdout)
+                        if (status.installed) log += "Claude Code ist bereits installiert (${status.version}) – wird aktualisiert."
                     }
-                }, onStderr = { line -> scope.launch { log += line } })
-                if (ok) {
-                    val after = parseStatus(container.ssh.exec(c, STATUS_SCRIPT, timeoutSeconds = 30).stdout)
-                    version = after.version
-                    loggedIn = loggedIn || after.loggedIn
-                    val firstExtra = toolsFound.firstOrNull()?.id
-                    container.settings.update {
-                        it.copy(
-                            agentMode = if (withClaude) AppSettings.MODE_CLAUDE_CODE else firstExtra ?: it.agentMode,
-                            reserveMode = if (withClaude && it.reserveMode.isEmpty()) firstExtra.orEmpty() else it.reserveMode,
-                            ccConnectionId = c.id, ccWorkDir = "",
+                    ok = false
+                    val exit = container.ssh.execStreaming(c, "sh -s", stdin = setupScript(withClaude, extrasNow), onStdout = { line ->
+                        val t = line.trim()
+                        when {
+                            t == "DEVDECK_INSTALL_OK" -> ok = true
+                            t == "DEVDECK_LOGGED_IN" -> loggedIn = true
+                            t.startsWith("DEVDECK_TOOL_OK ") -> CliAgent.byId(t.removePrefix("DEVDECK_TOOL_OK "))?.let { a ->
+                                toolsFound += a
+                                scope.launch { installedTools += a; log += "✓ ${a.label} installiert" }
+                            }
+                            t.startsWith("DEVDECK_TOOL_FAIL ") -> CliAgent.byId(t.removePrefix("DEVDECK_TOOL_FAIL "))?.let { a ->
+                                scope.launch { log += "✗ ${a.label} konnte nicht installiert werden" }
+                            }
+                            else -> scope.launch { log += line }
+                        }
+                    }, onStderr = { line -> scope.launch { log += line } })
+                    if (!ok) log += "Installation fehlgeschlagen (Exit-Code ${exit ?: "?"})."
+                    if (ok && withClaude) {
+                        val after = parseStatus(container.ssh.exec(c, STATUS_SCRIPT, timeoutSeconds = 30).stdout)
+                        version = after.version
+                        loggedIn = loggedIn || after.loggedIn
+                    }
+                }
+                var aiConn: AiServerConnection? = null
+                if (ok && withAi) {
+                    var aiOk = false
+                    val cmd = if (win) powershellCommand(ollamaWindowsScript(model)) else "sh -s"
+                    val exit = container.ssh.execStreaming(c, cmd, stdin = if (win) null else ollamaLinuxScript(model), onStdout = { line ->
+                        if (line.trim() == "DEVDECK_AI_OK") aiOk = true else scope.launch { log += line }
+                    }, onStderr = { line -> scope.launch { log += line } })
+                    if (aiOk) {
+                        val existing = container.connections.state.value.ai.firstOrNull { it.tunnelSshId == c.id && it.model == model }
+                        aiConn = existing ?: AiServerConnection(
+                            name = "${c.name} · $model", baseUrl = "http://127.0.0.1:11434", model = model, tunnelSshId = c.id,
                         )
+                        container.connections.save(aiConn)
+                        aiResult = model
+                        log += "✓ Selfhosted KI bereit: $model"
+                    } else {
+                        log += "Selfhosted KI: Installation fehlgeschlagen (Exit-Code ${exit ?: "?"})."
+                        ok = false
+                    }
+                }
+                if (ok) {
+                    val firstExtra = toolsFound.firstOrNull()?.id
+                    val aiMode = aiConn?.let { "ai:" + it.id }
+                    container.settings.update {
+                        val main = when {
+                            withClaude -> AppSettings.MODE_CLAUDE_CODE
+                            firstExtra != null -> firstExtra
+                            aiMode != null && it.agentMode == AppSettings.MODE_API && it.apiKey.isBlank() -> aiMode
+                            else -> it.agentMode
+                        }
+                        val reserve = it.reserveMode.ifEmpty { listOfNotNull(firstExtra.takeIf { withClaude }, aiMode).firstOrNull { r -> r != main }.orEmpty() }
+                        it.copy(agentMode = main, reserveMode = reserve, ccConnectionId = if (win) it.ccConnectionId else c.id, ccWorkDir = "")
                     }
                     phase = Phase.DONE
                 } else {
-                    log += "Installation fehlgeschlagen (Exit-Code ${exit ?: "?"})."
                     phase = Phase.FAILED
                 }
             } catch (e: kotlinx.coroutines.CancellationException) {
@@ -149,11 +197,38 @@ fun ServerSetupDialog(container: AppContainer, initial: SshConnection?, navigate
                                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                             SshFields(conn) { conn = it }
+                            Text("Betriebssystem des Servers", style = MaterialTheme.typography.titleSmall)
+                            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+                                SegmentedButton(selected = !conn.windows, onClick = { conn = conn.copy(windows = false) },
+                                    shape = SegmentedButtonDefaults.itemShape(0, 2)) { Text("Linux") }
+                                SegmentedButton(selected = conn.windows, onClick = { conn = conn.copy(windows = true); aiOn = true },
+                                    shape = SegmentedButtonDefaults.itemShape(1, 2)) { Text("Windows Server") }
+                            }
                             Text("Was soll installiert werden?", style = MaterialTheme.typography.titleSmall)
-                            ToolCheck("Claude Code", "Anthropic · Anmeldung mit deinem Claude-Abo", installClaude) { installClaude = it }
-                            Text("Kostenlose Reserve-Modelle (optional):", style = MaterialTheme.typography.labelLarge)
-                            CliAgent.entries.forEach { a ->
-                                ToolCheck(a.label, a.note, a in extras) { on -> if (on) extras += a else extras -= a }
+                            if (!conn.windows) {
+                                ToolCheck("Claude Code", "Anthropic · Anmeldung mit deinem Claude-Abo", installClaude) { installClaude = it }
+                                Text("Kostenlose Reserve-Modelle (optional):", style = MaterialTheme.typography.labelLarge)
+                                CliAgent.entries.forEach { a ->
+                                    ToolCheck(a.label, a.note, a in extras) { on -> if (on) extras += a else extras -= a }
+                                }
+                            } else {
+                                Text(
+                                    "Windows: Voraussetzung ist der OpenSSH-Server (Einstellungen → Optionale Features → „OpenSSH-Server“) " +
+                                        "und ein Administrator-Konto. Installiert wird die selfhosted KI.",
+                                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            ToolCheck("Selfhosted KI (Ollama)", "Open-Source-Modell läuft auf deinem Server · kostenlos, ohne Anmeldung, läuft dauerhaft", aiOn) { aiOn = it }
+                            if (aiOn) {
+                                OutlinedTextField(aiModel, { aiModel = it }, label = { Text("Modell") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                                SUGGESTED_MODELS.forEach { (m, note) ->
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        RadioButton(selected = aiModel == m, onClick = { aiModel = m })
+                                        Column { Text(m, fontFamily = MonoFamily, fontSize = 13.sp); Text(note, style = MaterialTheme.typography.bodySmall) }
+                                    }
+                                }
+                                Text("Weitere Modelle: ollama.com/library", style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                             Text(
                                 "Tipp: Claude Code läuft als der hier eingetragene Benutzer. Für Arbeiten mit vollen Rechten " +
@@ -163,7 +238,7 @@ fun ServerSetupDialog(container: AppContainer, initial: SshConnection?, navigate
                         }
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                             TextButton(onClick = onDismiss) { Text("Abbrechen") }
-                            Button(onClick = ::start, enabled = (installClaude || extras.isNotEmpty()) && conn.host.isNotBlank() && conn.username.isNotBlank() &&
+                            Button(onClick = ::start, enabled = ((!conn.windows && (installClaude || extras.isNotEmpty())) || (aiOn && aiModel.isNotBlank())) && conn.host.isNotBlank() && conn.username.isNotBlank() &&
                                 (!conn.password.isNullOrEmpty() || !conn.privateKey.isNullOrBlank())) { Text("Installieren") }
                         }
                     }
@@ -191,7 +266,13 @@ fun ServerSetupDialog(container: AppContainer, initial: SshConnection?, navigate
                                 TextButton(onClick = onDismiss) { Text("Schließen") }
                                 Button(onClick = ::start) { Text("Erneut versuchen") }
                             }
-                            else -> DoneSection(container, conn, installClaude, version, loggedIn, installedTools, navigate, onDismiss)
+                            else -> {
+                                aiResult?.let {
+                                    Text("✓ Selfhosted KI „$it“ läuft auf ${conn.name} – im Chat unter „Modell“ oder „Reserve“ wählbar (Verbindung über SSH-Tunnel).",
+                                        color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodyMedium)
+                                }
+                                DoneSection(container, conn, installClaude && !conn.windows, version, loggedIn, installedTools, navigate, onDismiss)
+                            }
                         }
                     }
                 }

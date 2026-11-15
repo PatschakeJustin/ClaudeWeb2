@@ -11,6 +11,8 @@ import app.devdeck.core.claudecode.ClaudeCodeSession
 import app.devdeck.core.claudecode.CliAgent
 import app.devdeck.core.claudecode.CliAgentSession
 import app.devdeck.data.AppSettings
+import app.devdeck.core.ai.SelfHostedSession
+import app.devdeck.core.model.ConnectionStore
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -62,6 +64,7 @@ class AgentViewModel(private val container: AppContainer) : ViewModel() {
     private var agent: ClaudeAgent? = null
     private var ccSession: ClaudeCodeSession? = null
     private val cliSessions = mutableMapOf<CliAgent, CliAgentSession>()
+    private val aiSessions = mutableMapOf<String, SelfHostedSession>()
     private var job: Job? = null
     private var approveAllInChat = false
     private val ids = AtomicLong()
@@ -79,7 +82,7 @@ class AgentViewModel(private val container: AppContainer) : ViewModel() {
                 val ok = runBackend(st.agentMode, trimmed)
                 val reserve = st.reserveMode
                 if (!ok && reserve.isNotEmpty() && reserve != st.agentMode) {
-                    append(ChatItem.Notice(nextKey(), "Wechsle zur Reserve: ${backendLabel(reserve)} …", false))
+                    append(ChatItem.Notice(nextKey(), "Wechsle zur Reserve: ${backendLabel(reserve, container.connections.state.value)} …", false))
                     runBackend(reserve, trimmed)
                 }
             } finally {
@@ -95,6 +98,15 @@ class AgentViewModel(private val container: AppContainer) : ViewModel() {
         var failed = false
         val emit: (AgentEvent) -> Unit = { e -> if (e is AgentEvent.Failed) failed = true; onEvent(e) }
         val st = container.settings.state.value
+        if (mode.startsWith(AI_PREFIX)) {
+            val id = mode.removePrefix(AI_PREFIX)
+            if (container.connections.state.value.ai.none { it.id == id }) {
+                emit(AgentEvent.Failed("Dieser KI-Server existiert nicht mehr. Bitte oben ein anderes Modell wählen."))
+                return false
+            }
+            aiSessions.getOrPut(id) { container.newSelfHostedSession(id) }.send(prompt, emit)
+            return !failed
+        }
         if (mode != AppSettings.MODE_API && container.connections.state.value.ssh.none { it.id == st.ccConnectionId }) {
             emit(AgentEvent.Failed("Bitte oben einen Server wählen (Verbindungen → „Server einrichten“)."))
             return false
@@ -151,6 +163,7 @@ class AgentViewModel(private val container: AppContainer) : ViewModel() {
         agent = null // fresh conversation (and picks up a changed API key)
         ccSession = null
         cliSessions.clear()
+        aiSessions.clear()
         approveAllInChat = false
         _items.value = emptyList()
     }
@@ -198,10 +211,15 @@ class AgentViewModel(private val container: AppContainer) : ViewModel() {
     private fun append(item: ChatItem) = _items.update { it + item }
 }
 
-/** All selectable backends: id to label. */
-val BACKENDS: List<Pair<String, String>> = listOf(
+const val AI_PREFIX = "ai:"
+
+/** All selectable backends (id to label), including the user's self-hosted model servers. */
+fun backends(store: ConnectionStore): List<Pair<String, String>> = listOf(
     AppSettings.MODE_CLAUDE_CODE to "Claude Code (Abo)",
     AppSettings.MODE_API to "Claude (API-Key)",
-) + CliAgent.entries.map { it.id to it.label }
+) + CliAgent.entries.map { it.id to it.label } + store.ai.map { AI_PREFIX + it.id to "KI: ${it.name}" }
 
-fun backendLabel(id: String) = BACKENDS.firstOrNull { it.first == id }?.second ?: id
+fun backendLabel(id: String, store: ConnectionStore) = backends(store).firstOrNull { it.first == id }?.second ?: id
+
+/** Backends that run on the selected SSH server (and need server/folder/permission settings). */
+fun runsOnServer(id: String) = id != AppSettings.MODE_API && !id.startsWith(AI_PREFIX)

@@ -168,6 +168,27 @@ class SshManager(
         }
     }
 
+    private val forwards = ConcurrentHashMap<String, Pair<java.net.ServerSocket, SSHClient>>()
+
+    /**
+     * Opens (or reuses) a local port that tunnels through [conn] to [remoteHost]:[remotePort] as seen
+     * from the SSH server. Returns the local port on 127.0.0.1.
+     */
+    suspend fun forward(conn: SshConnection, remoteHost: String, remotePort: Int): Int = withContext(Dispatchers.IO) {
+        val key = "${conn.id}|$remoteHost|$remotePort"
+        val c = client(conn)
+        forwards[key]?.let { (sock, owner) -> if (!sock.isClosed && owner === c && c.isConnected) return@withContext sock.localPort }
+        forwards.remove(key)?.let { runCatching { it.first.close() } }
+        val server = java.net.ServerSocket()
+        server.reuseAddress = true
+        server.bind(java.net.InetSocketAddress("127.0.0.1", 0))
+        val params = net.schmizz.sshj.connection.channel.direct.Parameters("127.0.0.1", server.localPort, remoteHost, remotePort)
+        val forwarder = c.newLocalPortForwarder(params, server)
+        Thread({ runCatching { forwarder.listen() }; runCatching { server.close() } }, "ssh-forward-$remotePort").apply { isDaemon = true; start() }
+        forwards[key] = server to c
+        server.localPort
+    }
+
     fun fs(conn: SshConnection): RemoteFs = SftpFs(this, conn)
 
     suspend fun openShell(conn: SshConnection, cols: Int, rows: Int, listener: ShellSession.Listener): ShellSession =

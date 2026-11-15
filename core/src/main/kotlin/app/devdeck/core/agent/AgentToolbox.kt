@@ -2,6 +2,7 @@ package app.devdeck.core.agent
 
 import app.devdeck.core.fs.RemoteFs
 import app.devdeck.core.fs.looksBinary
+import app.devdeck.core.model.AiServerConnection
 import app.devdeck.core.model.Connection
 import app.devdeck.core.model.ConnectionStore
 import app.devdeck.core.model.NextcloudConnection
@@ -182,6 +183,7 @@ class AgentToolbox(
                     (c.defaultDirectory?.let { ", Startverzeichnis $it" } ?: "") + " – Befehle und Dateien"
                 is NextcloudConnection -> "- ${c.name} [Nextcloud] ${c.baseUrl} (Nutzer ${c.username}) – nur Dateien"
                 is RdpConnection -> "- ${c.name} [RDP] ${c.host}:${c.port} – nur für den Nutzer per Remote-Desktop-App, für dich nicht nutzbar"
+                is AiServerConnection -> "- ${c.name} [KI-Server] Modell ${c.model} – ein Sprachmodell, kein Dateizugriff"
             }
         }
     }
@@ -196,6 +198,7 @@ class AgentToolbox(
         is SshConnection -> ssh.fs(c)
         is NextcloudConnection -> WebDavFs(c, http)
         is RdpConnection -> throw ToolInputException("'${c.name}' ist eine RDP-Verbindung; darauf hast du keinen Dateizugriff.")
+        is AiServerConnection -> throw ToolInputException("'${c.name}' ist ein KI-Server; darauf hast du keinen Dateizugriff.")
     }
 
     private suspend fun runCommand(input: JsonObject): ToolOutcome {
