@@ -39,20 +39,21 @@ class TerminalViewModel(private val container: AppContainer) : ViewModel() {
     private var sink: ((ByteArray) -> Unit)? = null
 
     /** Attaches a terminal view; replays what was printed so far. */
-    fun attach(newSink: (ByteArray) -> Unit) = synchronized(lock) {
+    fun attach(newSink: (ByteArray) -> Unit): Unit = synchronized(lock) {
         if (buffer.size() > 0) newSink(buffer.toByteArray())
         sink = newSink
     }
 
-    fun detach() = synchronized(lock) { sink = null }
+    fun detach(): Unit = synchronized(lock) { sink = null }
 
-    private fun output(data: ByteArray) = synchronized(lock) {
+    private fun output(data: ByteArray): Unit = synchronized(lock) {
         if (buffer.size() > MAX_BUFFER) {
             val keep = buffer.toByteArray().let { it.copyOfRange(it.size - MAX_BUFFER / 2, it.size) }
             buffer.reset(); buffer.write(keep)
         }
         buffer.write(data)
         sink?.invoke(data)
+        Unit
     }
 
     private fun local(text: String) = output(text.replace("\n", "\r\n").toByteArray())
@@ -66,7 +67,7 @@ class TerminalViewModel(private val container: AppContainer) : ViewModel() {
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 shell = container.ssh.openShell(conn, cols, rows, object : ShellSession.Listener {
-                    override fun onOutput(data: ByteArray) = output(data)
+                    override fun onOutput(data: ByteArray) { output(data) }
                     override fun onClosed(error: Throwable?) {
                         local("\n[Verbindung beendet${error?.message?.let { ": $it" } ?: ""}]\n")
                         _status.value = Status.Closed(conn.name, error?.message)
