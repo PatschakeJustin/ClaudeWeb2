@@ -1,22 +1,44 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Terminal prompt ">_" on a rounded tile. -->
+<!-- Humantize: two people forming an "H", reaching for each other, with a code spark between them. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="108dp"
-    android:height="108dp"
-    android:viewportWidth="108"
-    android:viewportHeight="108">
-    <path
-        android:fillColor="#D97757"
-        android:pathData="M30,30h48a6,6 0,0 1,6 6v36a6,6 0,0 1,-6 6h-48a6,6 0,0 1,-6 -6v-36a6,6 0,0 1,6 -6z" />
-    <path
-        android:strokeColor="#FFFFFF"
-        android:strokeWidth="5"
-        android:strokeLineCap="round"
-        android:strokeLineJoin="round"
-        android:pathData="M38,44l10,10l-10,10" />
-    <path
-        android:strokeColor="#FFFFFF"
-        android:strokeWidth="5"
-        android:strokeLineCap="round"
-        android:pathData="M54,66h16" />
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
+    <path android:pathData="M32,33a6,6 0,1 1,12 0a6,6 0,1 1,-12 0z">
+        <aapt:attr name="android:fillColor">
+            <gradient android:type="linear" android:startX="0" android:startY="27" android:endX="0" android:endY="39"
+                android:startColor="#FFFF8A5B" android:endColor="#FFFF8A5B" />
+        </aapt:attr>
+    </path>
+    <path android:pathData="M33,44a5,5 0,0 1,10 0v34a5,5 0,0 1,-10 0z">
+        <aapt:attr name="android:fillColor">
+            <gradient android:type="linear" android:startX="0" android:startY="39" android:endX="0" android:endY="83"
+                android:startColor="#FFFF8A5B" android:endColor="#FFFF5D73" />
+        </aapt:attr>
+    </path>
+    <path android:pathData="M64,33a6,6 0,1 1,12 0a6,6 0,1 1,-12 0z">
+        <aapt:attr name="android:fillColor">
+            <gradient android:type="linear" android:startX="0" android:startY="27" android:endX="0" android:endY="39"
+                android:startColor="#FF3DDBD9" android:endColor="#FF3DDBD9" />
+        </aapt:attr>
+    </path>
+    <path android:pathData="M65,44a5,5 0,0 1,10 0v34a5,5 0,0 1,-10 0z">
+        <aapt:attr name="android:fillColor">
+            <gradient android:type="linear" android:startX="0" android:startY="39" android:endX="0" android:endY="83"
+                android:startColor="#FF3DDBD9" android:endColor="#FF2E9CCA" />
+        </aapt:attr>
+    </path>
+    <path android:pathData="M43,56C49,56 50,62 54,62" android:strokeWidth="6" android:strokeLineCap="round">
+        <aapt:attr name="android:strokeColor">
+            <gradient android:type="linear" android:startX="43" android:startY="0" android:endX="54" android:endY="0"
+                android:startColor="#FFFF8A5B" android:endColor="#FFFF6F66" />
+        </aapt:attr>
+    </path>
+    <path android:pathData="M65,56C59,56 58,62 54,62" android:strokeWidth="6" android:strokeLineCap="round">
+        <aapt:attr name="android:strokeColor">
+            <gradient android:type="linear" android:startX="65" android:startY="0" android:endX="54" android:endY="0"
+                android:startColor="#FF3DDBD9" android:endColor="#FF35BCD2" />
+        </aapt:attr>
+    </path>
+    <path android:pathData="M50,71l-3,3l3,3M58,71l3,3l-3,3" android:strokeColor="#D9FFFFFF" android:strokeWidth="2"
+        android:strokeLineCap="round" android:strokeLineJoin="round" />
 </vector>

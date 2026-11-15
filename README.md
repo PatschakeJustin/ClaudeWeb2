@@ -1,4 +1,6 @@
-# DevDeck
+# Humantize DevApp Mobile
+
+<img src="branding/humantize-logo.svg" width="120" alt="Humantize-Logo">
 
 Android-App (Smartphone und Tablet) zum Programmieren unterwegs, mit Claude als Coding-Agent.
 
@@ -7,7 +9,7 @@ Android-App (Smartphone und Tablet) zum Programmieren unterwegs, mit Claude als 
 | Bereich | Was es kann |
 |---|---|
 | **Claude – Abo** | Chat mit dem echten **Claude Code** auf deinem Server (`claude -p` über SSH). Nutzt dein **Claude-Abo (Pro/Max)**, das auf dem Server angemeldet ist – kein API-Key nötig. Server, Arbeitsordner und Berechtigungsstufe (nur planen / Dateien ändern / alles) wählst du oben im Chat; Folgefragen setzen dieselbe Sitzung fort. |
-| **Server einrichten** | Unter *Verbindungen → Server einrichten*: Zugangsdaten eintragen, DevDeck installiert Claude Code (plus curl, git, tmux) per SSH mit Live-Protokoll und führt dich danach im Terminal durch die Anmeldung mit deinem Claude-Abo. |
+| **Server einrichten** | Unter *Verbindungen → Server einrichten*: Zugangsdaten eintragen, Humantize DevApp installiert Claude Code (plus curl, git, tmux) per SSH mit Live-Protokoll und führt dich danach im Terminal durch die Anmeldung mit deinem Claude-Abo. |
 | **Reserve-Modelle** | Optional installiert der Server-Assistent kostenlose Alternativen: **Gemini CLI** (Google-Konto), **Qwen Code** (qwen.ai-Konto), **Codex CLI** (ChatGPT-Konto) und **Ollama** (lokales Open-Source-Modell, ohne Anmeldung). Anmeldung jeweils über einen Login-Link im Terminal. Im Claude-Tab als Modell wählbar oder als **Reserve**, die automatisch einspringt, wenn das Hauptmodell scheitert (z. B. Abo-Limit). |
 | **Claude – API** | Alternativ: Chat mit einem Coding-Agenten über die Claude-API (eigener API-Key). Er hat Zugriff auf deine Verbindungen: Befehle per SSH ausführen, Dateien per SFTP oder Nextcloud lesen, schreiben und gezielt bearbeiten. Befehle und Änderungen fragt die App vorher ab (abschaltbar). |
 | **Terminal** | Vollwertiges SSH-Terminal (xterm.js) mit Sondertasten (Esc, Tab, Ctrl, Pfeile …). Über ⋮ startest du das echte **Claude Code** (`claude`) auf dem Server, installierst es oder öffnest eine tmux-Sitzung. Das Link-Symbol listet alle Links aus der Ausgabe (z. B. den Login-Link) zum Öffnen/Kopieren; „Einfügen“ und „Kopieren“ in der Tastenleiste. |
@@ -19,7 +21,7 @@ Alle Zugangsdaten werden mit einem Schlüssel aus dem Android Keystore (AES-256-
 
 ## Installieren
 
-**Direkter Download (neuester Build):** https://github.com/PatschakeJustin/ClaudeWeb2/releases/download/latest/DevDeck.apk
+**Direkter Download (neuester Build):** https://github.com/PatschakeJustin/ClaudeWeb2/releases/download/latest/Humantize-DevApp.apk
 
 Die Datei auf dem Android-Gerät öffnen und installieren. Dafür muss „Installation aus unbekannten Quellen“ für den Browser erlaubt sein. Bei einem privaten Repository musst du im Browser bei GitHub angemeldet sein.
 

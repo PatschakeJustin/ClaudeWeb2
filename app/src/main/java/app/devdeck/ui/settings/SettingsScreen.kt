@@ -100,7 +100,7 @@ fun SettingsScreen() {
             ) { v -> repo.update { it.copy(refusalFallback = v) } }
 
             HorizontalDivider()
-            Text("DevDeck 0.1.0", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("Humantize DevApp Mobile 0.2.0", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }

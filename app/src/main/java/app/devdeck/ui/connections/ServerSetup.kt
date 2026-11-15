@@ -144,7 +144,7 @@ fun ServerSetupDialog(container: AppContainer, initial: SshConnection?, navigate
                     Phase.FORM -> {
                         Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                             Text(
-                                "Trag die Zugangsdaten deines Servers ein. DevDeck verbindet sich per SSH, installiert Claude Code " +
+                                "Trag die Zugangsdaten deines Servers ein. Humantize DevApp verbindet sich per SSH, installiert Claude Code " +
                                     "(sowie curl, git und tmux, falls sie fehlen) und hilft dir danach bei der Anmeldung mit deinem Claude-Abo.",
                                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )

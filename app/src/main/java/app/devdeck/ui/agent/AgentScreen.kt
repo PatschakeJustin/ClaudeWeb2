@@ -66,6 +66,10 @@ import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import app.devdeck.ui.Dest
+import app.devdeck.R
+import androidx.compose.foundation.Image
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import app.devdeck.ui.LocalWideLayout
 import app.devdeck.ui.common.MarkdownText
 import app.devdeck.ui.common.containerViewModel
@@ -362,7 +366,12 @@ private fun EmptyState(hasKey: Boolean, connectionNames: List<String>, onSetup: 
         verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterVertically),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Text("Was soll Claude erledigen?", style = MaterialTheme.typography.titleLarge)
+        Image(
+            painterResource(R.drawable.ic_launcher_foreground), contentDescription = null,
+            modifier = Modifier.size(96.dp).clip(RoundedCornerShape(24.dp)).background(Color(0xFF14213D)),
+        )
+        Text("Humantize DevApp", style = MaterialTheme.typography.titleLarge)
+        Text("Was soll die KI für dich erledigen?", style = MaterialTheme.typography.bodyLarge)
         if (!hasKey) {
             Text("Zuerst einen Anthropic-API-Key hinterlegen.", style = MaterialTheme.typography.bodyMedium)
             TextButton(onClick = { onSetup(Dest.SETTINGS) }) { Text("Zu den Einstellungen") }

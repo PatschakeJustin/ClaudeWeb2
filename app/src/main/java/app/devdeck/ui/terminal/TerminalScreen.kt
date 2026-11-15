@@ -208,7 +208,7 @@ private fun openLink(context: Context, url: String) {
 
 private fun copyText(context: Context, text: String) {
     val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-    cm.setPrimaryClip(ClipData.newPlainText("DevDeck", text))
+    cm.setPrimaryClip(ClipData.newPlainText("Humantize", text))
 }
 
 private fun clipboardText(context: Context): String? {

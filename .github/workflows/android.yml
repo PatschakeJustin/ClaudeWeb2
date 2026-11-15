@@ -30,24 +30,24 @@ jobs:
         run: |
           set -o pipefail
           ./gradlew :app:assembleDebug 2>&1 | tee build.log || { echo "=== ERRORS ==="; grep -E "^e: |error:|What went wrong" -A2 build.log | head -100; exit 1; }
-          cp app/build/outputs/apk/debug/app-debug.apk DevDeck.apk
+          cp app/build/outputs/apk/debug/app-debug.apk Humantize-DevApp.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: DevDeck-debug-apk
-          path: DevDeck.apk
+          name: Humantize-DevApp-apk
+          path: Humantize-DevApp.apk
           if-no-files-found: error
 
-      # Fixed download link: https://github.com/<owner>/<repo>/releases/download/latest/DevDeck.apk
+      # Fixed download link: https://github.com/<owner>/<repo>/releases/download/latest/Humantize-DevApp.apk
       - name: Publish "latest" release
         if: github.event_name == 'push'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release delete latest --cleanup-tag --yes || true
-          gh release create latest DevDeck.apk --prerelease --target "$GITHUB_SHA" \
-            --title "DevDeck (neuester Build)" \
+          gh release create latest Humantize-DevApp.apk --prerelease --target "$GITHUB_SHA" \
+            --title "Humantize DevApp Mobile (neuester Build)" \
             --notes "Automatisch gebaut aus ${GITHUB_SHA::7} (Branch ${GITHUB_REF_NAME}). APK auf dem Android-Gerät öffnen und installieren."
 
       - name: Upload test reports
