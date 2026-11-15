@@ -41,7 +41,9 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import app.devdeck.AppContainer
 import app.devdeck.TerminalRequest
-import app.devdeck.core.claudecode.INSTALL_SCRIPT
+import app.devdeck.core.claudecode.CliAgent
+import app.devdeck.core.claudecode.setupScript
+import androidx.compose.material3.Checkbox
 import app.devdeck.core.claudecode.STATUS_SCRIPT
 import app.devdeck.core.claudecode.parseStatus
 import app.devdeck.core.model.SshConnection
@@ -65,6 +67,9 @@ fun ServerSetupDialog(container: AppContainer, initial: SshConnection?, navigate
     var version by remember { mutableStateOf<String?>(null) }
     var loggedIn by remember { mutableStateOf(false) }
     var job by remember { mutableStateOf<Job?>(null) }
+    var installClaude by remember { mutableStateOf(true) }
+    val extras = remember { mutableStateListOf(CliAgent.GEMINI) }
+    val installedTools = remember { mutableStateListOf<CliAgent>() }
     val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
 
@@ -76,17 +81,29 @@ fun ServerSetupDialog(container: AppContainer, initial: SshConnection?, navigate
         container.connections.save(c)
         container.ssh.disconnect(c.id)
         log.clear()
+        installedTools.clear()
         phase = Phase.RUNNING
+        val withClaude = installClaude
+        val script = setupScript(withClaude, extras.toList())
         job = scope.launch {
             try {
                 log += "Verbinde mit ${c.username}@${c.host}:${c.port} …"
                 val status = parseStatus(container.ssh.exec(c, STATUS_SCRIPT, timeoutSeconds = 30).stdout)
                 if (status.installed) log += "Claude Code ist bereits installiert (${status.version}) – wird aktualisiert."
                 var ok = false
-                val exit = container.ssh.execStreaming(c, "sh -s", stdin = INSTALL_SCRIPT, onStdout = { line ->
-                    when (line.trim()) {
-                        "DEVDECK_INSTALL_OK" -> ok = true
-                        "DEVDECK_LOGGED_IN" -> loggedIn = true
+                val toolsFound = java.util.concurrent.CopyOnWriteArrayList<CliAgent>()
+                val exit = container.ssh.execStreaming(c, "sh -s", stdin = script, onStdout = { line ->
+                    val t = line.trim()
+                    when {
+                        t == "DEVDECK_INSTALL_OK" -> ok = true
+                        t == "DEVDECK_LOGGED_IN" -> loggedIn = true
+                        t.startsWith("DEVDECK_TOOL_OK ") -> CliAgent.byId(t.removePrefix("DEVDECK_TOOL_OK "))?.let { a ->
+                            toolsFound += a
+                            scope.launch { installedTools += a; log += "✓ ${a.label} installiert" }
+                        }
+                        t.startsWith("DEVDECK_TOOL_FAIL ") -> CliAgent.byId(t.removePrefix("DEVDECK_TOOL_FAIL "))?.let { a ->
+                            scope.launch { log += "✗ ${a.label} konnte nicht installiert werden" }
+                        }
                         else -> scope.launch { log += line }
                     }
                 }, onStderr = { line -> scope.launch { log += line } })
@@ -94,8 +111,13 @@ fun ServerSetupDialog(container: AppContainer, initial: SshConnection?, navigate
                     val after = parseStatus(container.ssh.exec(c, STATUS_SCRIPT, timeoutSeconds = 30).stdout)
                     version = after.version
                     loggedIn = loggedIn || after.loggedIn
+                    val firstExtra = toolsFound.firstOrNull()?.id
                     container.settings.update {
-                        it.copy(agentMode = AppSettings.MODE_CLAUDE_CODE, ccConnectionId = c.id, ccWorkDir = "")
+                        it.copy(
+                            agentMode = if (withClaude) AppSettings.MODE_CLAUDE_CODE else firstExtra ?: it.agentMode,
+                            reserveMode = if (withClaude && it.reserveMode.isEmpty()) firstExtra.orEmpty() else it.reserveMode,
+                            ccConnectionId = c.id, ccWorkDir = "",
+                        )
                     }
                     phase = Phase.DONE
                 } else {
@@ -127,6 +149,12 @@ fun ServerSetupDialog(container: AppContainer, initial: SshConnection?, navigate
                                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                             SshFields(conn) { conn = it }
+                            Text("Was soll installiert werden?", style = MaterialTheme.typography.titleSmall)
+                            ToolCheck("Claude Code", "Anthropic · Anmeldung mit deinem Claude-Abo", installClaude) { installClaude = it }
+                            Text("Kostenlose Reserve-Modelle (optional):", style = MaterialTheme.typography.labelLarge)
+                            CliAgent.entries.forEach { a ->
+                                ToolCheck(a.label, a.note, a in extras) { on -> if (on) extras += a else extras -= a }
+                            }
                             Text(
                                 "Tipp: Claude Code läuft als der hier eingetragene Benutzer. Für Arbeiten mit vollen Rechten " +
                                     "ist ein normaler Benutzer mit sudo sicherer als root.",
@@ -135,14 +163,14 @@ fun ServerSetupDialog(container: AppContainer, initial: SshConnection?, navigate
                         }
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                             TextButton(onClick = onDismiss) { Text("Abbrechen") }
-                            Button(onClick = ::start, enabled = conn.host.isNotBlank() && conn.username.isNotBlank() &&
+                            Button(onClick = ::start, enabled = (installClaude || extras.isNotEmpty()) && conn.host.isNotBlank() && conn.username.isNotBlank() &&
                                 (!conn.password.isNullOrEmpty() || !conn.privateKey.isNullOrBlank())) { Text("Installieren") }
                         }
                     }
                     Phase.RUNNING, Phase.DONE, Phase.FAILED -> {
                         if (phase == Phase.RUNNING) Row(verticalAlignment = Alignment.CenterVertically) {
                             CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                            Text("Installiere auf ${conn.name} … (kann 1–3 Minuten dauern)", Modifier.padding(start = 10.dp))
+                            Text("Installiere auf ${conn.name} … (kann einige Minuten dauern)", Modifier.padding(start = 10.dp))
                         }
                         LazyColumn(
                             state = listState,
@@ -163,7 +191,7 @@ fun ServerSetupDialog(container: AppContainer, initial: SshConnection?, navigate
                                 TextButton(onClick = onDismiss) { Text("Schließen") }
                                 Button(onClick = ::start) { Text("Erneut versuchen") }
                             }
-                            else -> DoneSection(container, conn, version, loggedIn, navigate, onDismiss)
+                            else -> DoneSection(container, conn, installClaude, version, loggedIn, installedTools, navigate, onDismiss)
                         }
                     }
                 }
@@ -173,34 +201,65 @@ fun ServerSetupDialog(container: AppContainer, initial: SshConnection?, navigate
 }
 
 @Composable
+private fun ToolCheck(title: String, note: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+        Checkbox(checked = checked, onCheckedChange = onChange)
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.bodyMedium)
+            Text(note, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+@Composable
 private fun DoneSection(
-    container: AppContainer, conn: SshConnection, version: String?, loggedIn: Boolean,
-    navigate: (Dest) -> Unit, onDismiss: () -> Unit,
+    container: AppContainer, conn: SshConnection, withClaude: Boolean, version: String?, loggedIn: Boolean,
+    tools: List<CliAgent>, navigate: (Dest) -> Unit, onDismiss: () -> Unit,
 ) {
+    fun login(cmd: String) {
+        container.terminalRequests.value = TerminalRequest(conn.id, cmd)
+        onDismiss(); navigate(Dest.TERMINAL)
+    }
+    Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (withClaude) ClaudeDone(version, loggedIn) { login("claude\r") }
+        if (tools.isNotEmpty()) {
+            Text("Reserve-Modelle:", style = MaterialTheme.typography.titleSmall)
+            tools.forEach { a ->
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                    Text("✓ ${a.label}", Modifier.weight(1f))
+                    val cmd = a.loginCommand
+                    if (cmd != null) OutlinedButton(onClick = { login(cmd) }) { Text("Anmelden") }
+                    else Text("bereit", color = MaterialTheme.colorScheme.primary)
+                }
+            }
+            Text(
+                "Anmelden öffnet das Terminal mit dem Login des Werkzeugs. Den Link über das Link-Symbol öffnen, " +
+                    "im Browser anmelden und – falls ein Code angezeigt wird – im Terminal „Einfügen“ + Enter. " +
+                    "Danach im Claude-Tab unter „Modell“ oder „Reserve“ auswählen.",
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            Button(onClick = { onDismiss(); navigate(Dest.AGENT) }) { Text("Fertig") }
+        }
+    }
+}
+
+@Composable
+private fun ClaudeDone(version: String?, loggedIn: Boolean, onLogin: () -> Unit) {
     Text("✓ Claude Code ist installiert" + (version?.let { " ($it)" } ?: "") + ".", color = MaterialTheme.colorScheme.primary)
     if (loggedIn) {
-        Text("Auf dem Server ist bereits eine Anmeldung vorhanden. Du kannst direkt im Claude-Tab loslegen.",
-            style = MaterialTheme.typography.bodyMedium)
+        Text("Auf dem Server ist bereits eine Claude-Anmeldung vorhanden.", style = MaterialTheme.typography.bodyMedium)
     } else {
-        Text("Jetzt mit deinem Claude-Abo anmelden:", style = MaterialTheme.typography.titleSmall)
         Text(
-            "1. „Anmelden“ öffnet das Terminal und startet Claude Code.\n" +
+            "Mit deinem Claude-Abo anmelden:\n" +
+                "1. „Mit Claude-Abo anmelden“ öffnet das Terminal und startet Claude Code.\n" +
                 "2. Farbschema mit Enter bestätigen, dann „Claude account with subscription“ wählen.\n" +
-                "3. Oben auf das Link-Symbol tippen → „Öffnen“ → im Browser bei Claude anmelden und „Autorisieren“.\n" +
+                "3. Oben auf das Link-Symbol tippen → „Öffnen“ → im Browser anmelden und autorisieren.\n" +
                 "4. Den angezeigten Code kopieren, im Terminal „Einfügen“ tippen und Enter drücken.\n" +
-                "5. Fertig – Claude Code mit /exit beenden. Danach im Claude-Tab „Abo“ nutzen.",
+                "5. Claude Code mit /exit beenden – fertig.",
             style = MaterialTheme.typography.bodySmall,
         )
-    }
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)) {
-        if (!loggedIn) {
-            OutlinedButton(onClick = { onDismiss(); navigate(Dest.AGENT) }) { Text("Später") }
-            Button(onClick = {
-                container.terminalRequests.value = TerminalRequest(conn.id, "claude\r")
-                onDismiss(); navigate(Dest.TERMINAL)
-            }) { Text("Anmelden") }
-        } else {
-            Button(onClick = { onDismiss(); navigate(Dest.AGENT) }) { Text("Zum Claude-Tab") }
-        }
+        Button(onClick = onLogin) { Text("Mit Claude-Abo anmelden") }
     }
 }

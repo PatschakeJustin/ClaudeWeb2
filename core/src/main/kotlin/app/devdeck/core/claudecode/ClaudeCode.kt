@@ -144,8 +144,8 @@ class StreamJsonParser {
     }
 }
 
-/** Shell script that installs Claude Code (native installer) for the SSH user. Prints DEVDECK_INSTALL_OK on success. */
-val INSTALL_SCRIPT = """
+/** Base setup: system info and curl/git/tmux. */
+val BASE_SETUP_SCRIPT = """
 set -e
 echo "== System =="
 uname -sm
@@ -167,6 +167,10 @@ if [ -n "${'$'}need" ]; then
   else echo "Kein unterstützter Paketmanager gefunden."; fi
   command -v curl >/dev/null 2>&1 || { echo "curl fehlt und konnte nicht installiert werden (sudo-Rechte?)."; exit 1; }
 fi
+""".trimIndent()
+
+/** Installs Claude Code (native installer) for the SSH user. */
+val CLAUDE_INSTALL_SCRIPT = """
 echo "== Claude Code installieren =="
 curl -fsSL https://claude.ai/install.sh | bash
 export PATH="${'$'}HOME/.local/bin:${'$'}PATH"
@@ -177,8 +181,20 @@ done
 echo "== Prüfen =="
 claude --version
 if [ -f "${'$'}HOME/.claude/.credentials.json" ]; then echo "DEVDECK_LOGGED_IN"; fi
-echo "DEVDECK_INSTALL_OK"
 """.trimIndent()
+
+
+/** Full setup script; prints DEVDECK_INSTALL_OK at the end and DEVDECK_TOOL_OK/FAIL per extra tool. */
+fun setupScript(claude: Boolean, extras: Collection<CliAgent>): String = buildString {
+    appendLine(BASE_SETUP_SCRIPT)
+    if (claude) appendLine(CLAUDE_INSTALL_SCRIPT)
+    appendLine("set +e")
+    appendLine(extraInstallScript(extras))
+    appendLine("echo DEVDECK_INSTALL_OK")
+}
+
+/** Claude Code only (kept for callers that just want Claude). */
+val INSTALL_SCRIPT: String get() = setupScript(true, emptyList())
 
 /** Quick probe: is Claude Code installed, which version, and does a login exist? */
 const val STATUS_SCRIPT = CLAUDE_PATH_PREFIX +

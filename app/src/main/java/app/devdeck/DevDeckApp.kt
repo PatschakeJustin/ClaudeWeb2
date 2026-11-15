@@ -4,6 +4,8 @@ import android.app.Application
 import app.devdeck.core.agent.AgentToolbox
 import app.devdeck.core.agent.ClaudeAgent
 import app.devdeck.core.claudecode.ClaudeCodePermission
+import app.devdeck.core.claudecode.CliAgent
+import app.devdeck.core.claudecode.CliAgentSession
 import app.devdeck.core.claudecode.ClaudeCodeSession
 import app.devdeck.core.ssh.SshManager
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -43,6 +45,17 @@ class AppContainer(app: Application) {
 
     /** Lets other screens ask the terminal to connect to a server and type something (e.g. `claude`). */
     val terminalRequests = MutableStateFlow<TerminalRequest?>(null)
+
+    fun newCliSession(agent: CliAgent) = CliAgentSession(
+        ssh, agent,
+        connection = { connections.state.value.ssh.firstOrNull { it.id == settings.state.value.ccConnectionId } },
+        workDir = {
+            val s = settings.state.value
+            s.ccWorkDir.ifBlank { connections.state.value.ssh.firstOrNull { it.id == s.ccConnectionId }?.defaultDirectory.orEmpty() }
+        },
+        permission = { runCatching { ClaudeCodePermission.valueOf(settings.state.value.ccPermission) }.getOrDefault(ClaudeCodePermission.EDIT) },
+        ollamaModel = { settings.state.value.ollamaModel },
+    )
 
     fun newClaudeCodeSession() = ClaudeCodeSession(
         ssh,

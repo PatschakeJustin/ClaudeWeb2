@@ -95,7 +95,7 @@ fun AgentScreen(navigate: (Dest) -> Unit) {
                     Text("Claude")
                     val ccServer = connections.ssh.firstOrNull { it.id == settings.ccConnectionId }?.name
                     Text(
-                        if (settings.agentMode == AppSettings.MODE_CLAUDE_CODE) "Claude Code (Abo) · ${ccServer ?: "kein Server"}"
+                        if (settings.agentMode != AppSettings.MODE_API) backendLabel(settings.agentMode) + " · ${ccServer ?: "kein Server"}"
                         else "API · " + settings.model + " · " + settings.effort,
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -112,7 +112,7 @@ fun AgentScreen(navigate: (Dest) -> Unit) {
         Box(Modifier.weight(1f).fillMaxWidth()) {
             if (items.isEmpty()) {
                 EmptyState(
-                    hasKey = settings.agentMode == AppSettings.MODE_CLAUDE_CODE || settings.apiKey.isNotBlank(),
+                    hasKey = settings.agentMode != AppSettings.MODE_API || settings.apiKey.isNotBlank(),
                     connectionNames = connections.ssh.map { it.name } + connections.nextcloud.map { it.name },
                     onSetup = navigate,
                     onPrompt = { input = it },
@@ -194,47 +194,62 @@ fun AgentScreen(navigate: (Dest) -> Unit) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ModeBar(vm: AgentViewModel, settings: AppSettings, connections: ConnectionStore, navigate: (Dest) -> Unit) {
-    val cc = settings.agentMode == AppSettings.MODE_CLAUDE_CODE
+    // All backends except the API one run on the selected server.
+    val cc = settings.agentMode != AppSettings.MODE_API
     var serverMenu by remember { mutableStateOf(false) }
     var permMenu by remember { mutableStateOf(false) }
     var dirDialog by remember { mutableStateOf(false) }
     val server = connections.ssh.firstOrNull { it.id == settings.ccConnectionId }
     val perm = runCatching { ClaudeCodePermission.valueOf(settings.ccPermission) }.getOrDefault(ClaudeCodePermission.EDIT)
 
-    Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
-        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-            SegmentedButton(selected = cc, onClick = { vm.setMode(AppSettings.MODE_CLAUDE_CODE) },
-                shape = SegmentedButtonDefaults.itemShape(0, 2)) { Text("Abo (Claude Code)") }
-            SegmentedButton(selected = !cc, onClick = { vm.setMode(AppSettings.MODE_API) },
-                shape = SegmentedButtonDefaults.itemShape(1, 2)) { Text("API-Key") }
+    var modelMenu by remember { mutableStateOf(false) }
+    var reserveMenu by remember { mutableStateOf(false) }
+    Row(
+        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Box {
+            AssistChip(onClick = { modelMenu = true }, label = { Text("Modell: " + backendLabel(settings.agentMode)) })
+            DropdownMenu(modelMenu, onDismissRequest = { modelMenu = false }) {
+                BACKENDS.forEach { (id, label) ->
+                    DropdownMenuItem(text = { Text(label) }, onClick = { modelMenu = false; vm.setMode(id) })
+                }
+            }
+        }
+        Box {
+            AssistChip(
+                onClick = { reserveMenu = true },
+                label = { Text("Reserve: " + (settings.reserveMode.takeIf { it.isNotEmpty() }?.let(::backendLabel) ?: "keine")) },
+            )
+            DropdownMenu(reserveMenu, onDismissRequest = { reserveMenu = false }) {
+                DropdownMenuItem(text = { Text("Keine Reserve") }, onClick = { reserveMenu = false; vm.setReserve("") })
+                BACKENDS.filter { it.first != settings.agentMode }.forEach { (id, label) ->
+                    DropdownMenuItem(text = { Text(label) }, onClick = { reserveMenu = false; vm.setReserve(id) })
+                }
+            }
         }
         if (cc) {
-            Row(
-                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(top = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Box {
-                    AssistChip(onClick = { serverMenu = true }, label = { Text("Server: " + (server?.name ?: "wählen")) })
-                    DropdownMenu(serverMenu, onDismissRequest = { serverMenu = false }) {
-                        connections.ssh.forEach { c ->
-                            DropdownMenuItem(text = { Text(c.name) }, onClick = { serverMenu = false; vm.setClaudeCodeServer(c.id) })
-                        }
-                        DropdownMenuItem(text = { Text("Server einrichten …") }, onClick = { serverMenu = false; navigate(Dest.CONNECTIONS) })
+            Box {
+                AssistChip(onClick = { serverMenu = true }, label = { Text("Server: " + (server?.name ?: "wählen")) })
+                DropdownMenu(serverMenu, onDismissRequest = { serverMenu = false }) {
+                    connections.ssh.forEach { c ->
+                        DropdownMenuItem(text = { Text(c.name) }, onClick = { serverMenu = false; vm.setClaudeCodeServer(c.id) })
                     }
+                    DropdownMenuItem(text = { Text("Server einrichten …") }, onClick = { serverMenu = false; navigate(Dest.CONNECTIONS) })
                 }
-                AssistChip(
-                    onClick = { dirDialog = true },
-                    label = { Text("Ordner: " + settings.ccWorkDir.ifBlank { server?.defaultDirectory ?: "~" }, maxLines = 1) },
-                )
-                Box {
-                    AssistChip(onClick = { permMenu = true }, label = { Text(perm.label) })
-                    DropdownMenu(permMenu, onDismissRequest = { permMenu = false }) {
-                        ClaudeCodePermission.entries.forEach { p ->
-                            DropdownMenuItem(
-                                text = { Column { Text(p.label); Text(p.description, style = MaterialTheme.typography.bodySmall) } },
-                                onClick = { permMenu = false; vm.setClaudeCodePermission(p) },
-                            )
-                        }
+            }
+            AssistChip(
+                onClick = { dirDialog = true },
+                label = { Text("Ordner: " + settings.ccWorkDir.ifBlank { server?.defaultDirectory ?: "~" }, maxLines = 1) },
+            )
+            Box {
+                AssistChip(onClick = { permMenu = true }, label = { Text(perm.label) })
+                DropdownMenu(permMenu, onDismissRequest = { permMenu = false }) {
+                    ClaudeCodePermission.entries.forEach { p ->
+                        DropdownMenuItem(
+                            text = { Column { Text(p.label); Text(p.description, style = MaterialTheme.typography.bodySmall) } },
+                            onClick = { permMenu = false; vm.setClaudeCodePermission(p) },
+                        )
                     }
                 }
             }
@@ -330,7 +345,7 @@ private fun toolLabel(name: String) = when (name) {
     "Glob", "Grep", "LS" -> "Suche"
     "WebFetch", "WebSearch" -> "Web"
     "TodoWrite" -> "Aufgabenliste"
-    "Task", "Agent" -> "Teilaufgabe
+    "Task", "Agent" -> "Teilaufgabe"
     "run_command" -> "Befehl"
     "read_file" -> "Datei lesen"
     "write_file" -> "Datei schreiben"

@@ -8,6 +8,8 @@ import app.devdeck.core.agent.ClaudeAgent
 import app.devdeck.core.agent.ToolApprover
 import app.devdeck.core.claudecode.ClaudeCodePermission
 import app.devdeck.core.claudecode.ClaudeCodeSession
+import app.devdeck.core.claudecode.CliAgent
+import app.devdeck.core.claudecode.CliAgentSession
 import app.devdeck.data.AppSettings
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Job
@@ -59,6 +61,7 @@ class AgentViewModel(private val container: AppContainer) : ViewModel() {
 
     private var agent: ClaudeAgent? = null
     private var ccSession: ClaudeCodeSession? = null
+    private val cliSessions = mutableMapOf<CliAgent, CliAgentSession>()
     private var job: Job? = null
     private var approveAllInChat = false
     private val ids = AtomicLong()
@@ -69,35 +72,53 @@ class AgentViewModel(private val container: AppContainer) : ViewModel() {
         val trimmed = text.trim()
         if (trimmed.isEmpty() || _running.value) return
         val st = container.settings.state.value
-        if (st.agentMode == AppSettings.MODE_CLAUDE_CODE) {
-            if (container.connections.state.value.ssh.none { it.id == st.ccConnectionId }) {
-                append(ChatItem.Notice(nextKey(), "Bitte oben einen Server wählen, auf dem Claude Code eingerichtet ist (Verbindungen → „Server einrichten“).", true))
-                return
-            }
-            val session = ccSession ?: container.newClaudeCodeSession().also { ccSession = it }
-            launchTurn(trimmed) { session.send(trimmed) { e -> onEvent(e) } }
-            return
-        }
-        val a = agent ?: container.newAgent().also { agent = it }
-        if (a == null) {
-            append(ChatItem.Notice(nextKey(), "Kein API-Key gesetzt. Bitte unter Einstellungen den Anthropic-API-Key eintragen – oder oben auf „Abo“ wechseln.", true))
-            return
-        }
-        launchTurn(trimmed) { a.send(trimmed, approver) { onEvent(it) } }
-    }
-
-    private fun launchTurn(text: String, block: suspend () -> Unit) {
-        append(ChatItem.User(nextKey(), text))
+        append(ChatItem.User(nextKey(), trimmed))
         _running.value = true
         job = viewModelScope.launch {
             try {
-                block()
+                val ok = runBackend(st.agentMode, trimmed)
+                val reserve = st.reserveMode
+                if (!ok && reserve.isNotEmpty() && reserve != st.agentMode) {
+                    append(ChatItem.Notice(nextKey(), "Wechsle zur Reserve: ${backendLabel(reserve)} …", false))
+                    runBackend(reserve, trimmed)
+                }
             } finally {
                 _running.value = false
                 _approval.value?.answer?.complete(false)
                 _approval.value = null
             }
         }
+    }
+
+    /** Runs one turn on the given backend; returns false if it failed. */
+    private suspend fun runBackend(mode: String, prompt: String): Boolean {
+        var failed = false
+        val emit: (AgentEvent) -> Unit = { e -> if (e is AgentEvent.Failed) failed = true; onEvent(e) }
+        val st = container.settings.state.value
+        if (mode != AppSettings.MODE_API && container.connections.state.value.ssh.none { it.id == st.ccConnectionId }) {
+            emit(AgentEvent.Failed("Bitte oben einen Server wählen (Verbindungen → „Server einrichten“)."))
+            return false
+        }
+        when (mode) {
+            AppSettings.MODE_CLAUDE_CODE -> {
+                val session = ccSession ?: container.newClaudeCodeSession().also { ccSession = it }
+                session.send(prompt, emit)
+            }
+            AppSettings.MODE_API -> {
+                val a = agent ?: container.newAgent().also { agent = it }
+                if (a == null) {
+                    emit(AgentEvent.Failed("Kein API-Key gesetzt. Bitte unter Einstellungen eintragen oder ein anderes Modell wählen."))
+                } else {
+                    a.send(prompt, approver) { emit(it) }
+                }
+            }
+            else -> {
+                val cli = CliAgent.byId(mode)
+                if (cli == null) emit(AgentEvent.Failed("Unbekanntes Modell: $mode"))
+                else (cliSessions.getOrPut(cli) { container.newCliSession(cli) }).send(prompt, emit)
+            }
+        }
+        return !failed
     }
 
     fun setMode(mode: String) {
@@ -116,6 +137,8 @@ class AgentViewModel(private val container: AppContainer) : ViewModel() {
         newChat()
     }
 
+    fun setReserve(mode: String) = container.settings.update { it.copy(reserveMode = mode) }
+
     fun setClaudeCodePermission(p: ClaudeCodePermission) = container.settings.update { it.copy(ccPermission = p.name) }
 
     fun stop() {
@@ -127,6 +150,7 @@ class AgentViewModel(private val container: AppContainer) : ViewModel() {
         job?.cancel()
         agent = null // fresh conversation (and picks up a changed API key)
         ccSession = null
+        cliSessions.clear()
         approveAllInChat = false
         _items.value = emptyList()
     }
@@ -173,3 +197,11 @@ class AgentViewModel(private val container: AppContainer) : ViewModel() {
 
     private fun append(item: ChatItem) = _items.update { it + item }
 }
+
+/** All selectable backends: id to label. */
+val BACKENDS: List<Pair<String, String>> = listOf(
+    AppSettings.MODE_CLAUDE_CODE to "Claude Code (Abo)",
+    AppSettings.MODE_API to "Claude (API-Key)",
+) + CliAgent.entries.map { it.id to it.label }
+
+fun backendLabel(id: String) = BACKENDS.firstOrNull { it.first == id }?.second ?: id

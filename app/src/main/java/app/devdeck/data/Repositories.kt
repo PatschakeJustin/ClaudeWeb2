@@ -43,6 +43,9 @@ data class AppSettings(
     val ccConnectionId: String? = null,
     val ccWorkDir: String = "",
     val ccPermission: String = "EDIT",
+    /** Backend used automatically when the main one fails ("" = none). Same ids as [agentMode]. */
+    val reserveMode: String = "",
+    val ollamaModel: String = "qwen2.5-coder:7b",
 ) {
     companion object {
         const val MODE_CLAUDE_CODE = "claude_code"
