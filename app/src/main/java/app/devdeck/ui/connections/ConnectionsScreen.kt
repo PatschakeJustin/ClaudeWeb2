@@ -70,6 +70,9 @@ import app.devdeck.core.model.SshConnection
 import app.devdeck.core.nextcloud.WebDavFs
 import app.devdeck.ui.appContainer
 import app.devdeck.ui.Dest
+import app.devdeck.data.ServerBackup
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import app.devdeck.TerminalRequest
 import app.devdeck.core.claudecode.LOGIN_STATUS_SCRIPT
 import app.devdeck.core.claudecode.loginSteps
@@ -92,10 +95,73 @@ fun ConnectionsScreen(navigate: (Dest) -> Unit) {
     var setupOpen by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val settings by container.settings.state.collectAsState()
+    val backupError by container.backup.lastError.collectAsState()
+    var fileMenu by remember { mutableStateOf(false) }
+    val createBackup = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { uri ->
+        if (uri != null) {
+            container.backup.enable(uri)
+            Toast.makeText(context, "Gesichert. Die Datei wird ab jetzt bei jeder Änderung aktualisiert.", Toast.LENGTH_LONG).show()
+        }
+    }
+    val openBackup = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) {
+            try {
+                val n = container.backup.import(uri)
+                if (container.settings.state.value.backupUri == null) container.backup.enable(uri)
+                Toast.makeText(context, "$n Verbindungen geladen", Toast.LENGTH_LONG).show()
+            } catch (e: Exception) {
+                Toast.makeText(context, "Datei konnte nicht gelesen werden: ${e.message}", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
 
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
-            TopAppBar(title = { Text("Verbindungen") })
+            TopAppBar(
+                title = { Text("Verbindungen") },
+                actions = {
+                    Box {
+                        IconButton(onClick = { fileMenu = true }) { Icon(Icons.Filled.MoreVert, "Datei") }
+                        DropdownMenu(fileMenu, onDismissRequest = { fileMenu = false }) {
+                            DropdownMenuItem(
+                                text = { Text(if (settings.backupUri == null) "Server in Datei sichern …" else "Sicherungsdatei ändern …") },
+                                onClick = { fileMenu = false; createBackup.launch(ServerBackup.FILE_NAME) },
+                            )
+                            DropdownMenuItem(text = { Text("Server aus Datei laden …") }, onClick = {
+                                fileMenu = false; openBackup.launch(arrayOf("text/plain", "application/json", "*/*"))
+                            })
+                            if (settings.backupUri != null) DropdownMenuItem(text = { Text("Automatische Sicherung beenden") }, onClick = {
+                                fileMenu = false; container.backup.disable()
+                                Toast.makeText(context, "Automatische Sicherung beendet", Toast.LENGTH_SHORT).show()
+                            })
+                        }
+                    }
+                },
+            )
+            backupError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(horizontal = 16.dp)) }
+            if (store.all.isEmpty()) {
+                Card(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp)) {
+                    Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("App neu installiert?", style = MaterialTheme.typography.titleSmall)
+                            Text("Server aus deiner Sicherungsdatei (${ServerBackup.FILE_NAME}) laden.", style = MaterialTheme.typography.bodySmall)
+                        }
+                        TextButton(onClick = { openBackup.launch(arrayOf("text/plain", "application/json", "*/*")) }) { Text("Laden") }
+                    }
+                }
+            } else if (settings.backupUri == null) {
+                Card(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp)) {
+                    Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("Server sichern", style = MaterialTheme.typography.titleSmall)
+                            Text("In einer Textdatei speichern, damit sie eine Neuinstallation überstehen.", style = MaterialTheme.typography.bodySmall)
+                        }
+                        TextButton(onClick = { createBackup.launch(ServerBackup.FILE_NAME) }) { Text("Sichern") }
+                    }
+                }
+            }
             Card(
                 Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),

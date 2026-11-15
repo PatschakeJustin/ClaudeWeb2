@@ -37,6 +37,21 @@ fun findAuthUrls(text: String): List<String> =
         .filter { AUTH_HINT.containsMatchIn(it) && !it.endsWith("...") }
         .distinct().toList()
 
+/**
+ * All complete http(s) URLs in [text] (a URL at the very end may still be incomplete and is skipped).
+ * Used during a guided login, where any link the tool prints is the login page.
+ */
+fun findCompleteUrls(text: String): List<String> =
+    URL.findAll(text)
+        .filter { it.range.last + 1 < text.length }
+        .map { it.value.trimEnd('.', ',', ')', ';', ':', '…') }
+        .filter { it.length > 12 && !it.endsWith("...") }
+        .distinct().toList()
+
+/** Picks the most likely login page: the last login-looking URL, otherwise the last URL at all. */
+fun pickLoginUrl(urls: List<String>): String? =
+    urls.lastOrNull { AUTH_HINT.containsMatchIn(it) } ?: urls.lastOrNull()
+
 private val DEVICE_CODE = Regex("\\b([A-Z0-9]{4,5}-[A-Z0-9]{4,5})\\b")
 
 /** One-time device codes such as `ABCD-1234` that the user has to type on the login page. */

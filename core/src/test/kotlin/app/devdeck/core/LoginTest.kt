@@ -58,3 +58,13 @@ class LoginEdgeCaseTest {
         assertEquals(listOf(url), findAuthUrls(stripTerminalCodes("\u001b]8;;$url\u0007$url\u001b]8;;\u0007\n")))
     }
 }
+
+class LoginPickTest {
+    @Test fun anyCompleteUrlDuringLogin() {
+        val text = "Open this page: https://chat.qwen.ai/authorize?user_code=AB12&client=qwen-code\nWaiting…\nhttps://partial.example"
+        val urls = app.devdeck.core.claudecode.findCompleteUrls(text)
+        assertEquals(listOf("https://chat.qwen.ai/authorize?user_code=AB12&client=qwen-code"), urls)
+        assertEquals("https://chat.qwen.ai/authorize?user_code=AB12&client=qwen-code", app.devdeck.core.claudecode.pickLoginUrl(urls))
+        assertEquals("https://x.example/page", app.devdeck.core.claudecode.pickLoginUrl(listOf("https://x.example/page")))
+    }
+}

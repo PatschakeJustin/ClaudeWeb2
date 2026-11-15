@@ -32,6 +32,8 @@ Voraussetzung: Android 8.0 oder neuer.
 
 **Anmelden / neu anmelden:** In der Serverliste über ⋮ → **„Alle neu anmelden“** (oder im Terminal über ⋮). Die App prüft, was installiert ist, und meldet Claude Code, Gemini, Qwen und Codex nacheinander an. Die **Anmeldeseite öffnet sich automatisch** im Browser; den angezeigten Code in der Anmelde-Leiste mit „Code einfügen“ übernehmen. ⋮ → **„Terminal (neu) starten“** baut die Terminal-Sitzung neu auf.
 
+**Server sichern:** Verbindungen → ⋮ → „Server in Datei sichern …“ – Speicherort wählen (z. B. Downloads). Die Datei `humantize-server.txt` wird danach bei jeder Änderung automatisch aktualisiert und übersteht das Deinstallieren der App. Nach einer Neuinstallation: Verbindungen → „Server aus Datei laden“. Achtung: Die Datei enthält Passwörter/Schlüssel im Klartext.
+
 **Mit Claude-Abo (empfohlen):**
 1. **Verbindungen → Server einrichten:** Host, Benutzer, Passwort/Schlüssel eintragen → „Installieren“.
 2. **Anmelden:** Das Terminal startet `claude`. „Claude account with subscription“ wählen, Link über das Link-Symbol öffnen, im Browser anmelden, Code kopieren, im Terminal „Einfügen“ + Enter.

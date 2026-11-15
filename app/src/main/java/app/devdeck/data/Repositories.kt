@@ -48,6 +48,8 @@ data class AppSettings(
     val ollamaModel: String = "qwen2.5-coder:7b",
     /** Look for a new version when the app starts. */
     val autoUpdateCheck: Boolean = true,
+    /** Text file (content URI) that always holds a copy of the servers; null = off. */
+    val backupUri: String? = null,
 ) {
     companion object {
         const val MODE_CLAUDE_CODE = "claude_code"

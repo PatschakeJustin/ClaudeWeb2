@@ -80,8 +80,20 @@ fun TerminalScreen(navigate: (Dest) -> Unit) {
     val login by vm.login.collectAsState()
 
     LaunchedEffect(vm) {
-        launch { vm.openUrlEvents.collect { openLink(context, it) } }
         vm.messages.collect { Toast.makeText(context, it, Toast.LENGTH_LONG).show() }
+    }
+    // Open the login page as soon as it is known (state, not a one-shot event, so it is never missed).
+    val loginUrl = login?.url
+    LaunchedEffect(loginUrl) {
+        if (loginUrl != null && vm.shouldOpen(loginUrl)) openLink(context, loginUrl)
+    }
+    // Second source while logging in: scan the rendered terminal buffer for links.
+    val loginActive = login != null
+    LaunchedEffect(loginActive, webView) {
+        while (loginActive) {
+            webView?.evaluateJavascript("termLinks()") { raw -> decodeJsList(raw).reversed().takeIf { it.isNotEmpty() }?.let(vm::onBufferLinks) }
+            kotlinx.coroutines.delay(1500)
+        }
     }
 
     val title = when (val s = status) {

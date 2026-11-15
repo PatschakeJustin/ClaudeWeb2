@@ -17,6 +17,7 @@ import app.devdeck.data.KnownHostsRepository
 import app.devdeck.data.SecureStore
 import app.devdeck.data.SettingsRepository
 import app.devdeck.data.Updater
+import app.devdeck.data.ServerBackup
 import com.anthropic.client.AnthropicClient
 import com.anthropic.client.okhttp.AnthropicOkHttpClient
 import okhttp3.OkHttpClient
@@ -50,6 +51,7 @@ class AppContainer(app: Application) {
     val knownHosts = KnownHostsRepository(secure)
     val http = OkHttpClient()
     val updater = Updater(app, http)
+    val backup = ServerBackup(app, connections, settings)
     val ssh = SshManager(knownHosts)
     val toolbox = AgentToolbox({ connections.state.value }, ssh, http)
 

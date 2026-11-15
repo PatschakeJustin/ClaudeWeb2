@@ -16,7 +16,8 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import app.devdeck.core.claudecode.LOGIN_STATUS_SCRIPT
 import app.devdeck.core.claudecode.LoginStep
-import app.devdeck.core.claudecode.findAuthUrls
+import app.devdeck.core.claudecode.findCompleteUrls
+import app.devdeck.core.claudecode.pickLoginUrl
 import app.devdeck.core.claudecode.findDeviceCode
 import app.devdeck.core.claudecode.loginSteps
 import app.devdeck.core.claudecode.stripTerminalCodes
@@ -45,8 +46,6 @@ class TerminalViewModel(private val container: AppContainer) : ViewModel() {
     private val _login = MutableStateFlow<LoginState?>(null)
     val login: StateFlow<LoginState?> = _login.asStateFlow()
 
-    /** Login pages to open in the browser. */
-    val openUrlEvents = MutableSharedFlow<String>(extraBufferCapacity = 4)
     private val _messages = MutableSharedFlow<String>(extraBufferCapacity = 4)
     val messages = _messages.asSharedFlow()
 
@@ -166,12 +165,22 @@ class TerminalViewModel(private val container: AppContainer) : ViewModel() {
         scan.append(data.toString(Charsets.UTF_8))
         if (scan.length > 64_000) scan.delete(0, scan.length - 32_000)
         val text = stripTerminalCodes(scan.toString())
-        val url = findAuthUrls(text).lastOrNull()
-        val code = findDeviceCode(text)
-        val cur = _login.value ?: return
-        if (url != cur.url || code != cur.code) _login.value = cur.copy(url = url ?: cur.url, code = code ?: cur.code)
-        if (url != null && openedUrls.add(url)) openUrlEvents.tryEmit(url)
+        updateLogin(pickLoginUrl(findCompleteUrls(text)), findDeviceCode(text))
     }
+
+    /** Links found in the visible terminal buffer (second source, also catches soft-wrapped links). */
+    fun onBufferLinks(urls: List<String>) {
+        if (_login.value?.url == null) updateLogin(pickLoginUrl(urls), null)
+    }
+
+    private fun updateLogin(url: String?, code: String?) {
+        val cur = _login.value ?: return
+        val next = cur.copy(url = url ?: cur.url, code = code ?: cur.code)
+        if (next != cur) _login.value = next
+    }
+
+    /** True the first time a login page should be opened (the screen opens it in the browser). */
+    fun shouldOpen(url: String): Boolean = synchronized(openedUrls) { openedUrls.add(url) }
 
     private fun startStep(index: Int) {
         val st = _login.value ?: return
