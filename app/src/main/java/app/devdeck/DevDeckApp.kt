@@ -6,6 +6,7 @@ import app.devdeck.core.ai.OpenAiCompatClient
 import app.devdeck.core.ai.SelfHostedSession
 import app.devdeck.core.agent.ClaudeAgent
 import app.devdeck.core.claudecode.ClaudeCodePermission
+import app.devdeck.core.claudecode.LoginStep
 import app.devdeck.core.claudecode.CliAgent
 import app.devdeck.core.claudecode.CliAgentSession
 import app.devdeck.core.claudecode.ClaudeCodeSession
@@ -34,7 +35,12 @@ class DevDeckApp : Application() {
     }
 }
 
-data class TerminalRequest(val connectionId: String, val input: String?)
+data class TerminalRequest(
+    val connectionId: String,
+    val input: String? = null,
+    /** Guided logins to run one after another (opens each login page automatically). */
+    val logins: List<LoginStep> = emptyList(),
+)
 
 class AppContainer(app: Application) {
     private val secure = SecureStore(app)

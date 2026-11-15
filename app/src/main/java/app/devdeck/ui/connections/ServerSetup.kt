@@ -42,6 +42,7 @@ import androidx.compose.ui.window.DialogProperties
 import app.devdeck.AppContainer
 import app.devdeck.TerminalRequest
 import app.devdeck.core.claudecode.CliAgent
+import app.devdeck.core.claudecode.loginSteps
 import app.devdeck.core.ai.SUGGESTED_MODELS
 import app.devdeck.core.ai.ollamaLinuxScript
 import app.devdeck.core.ai.ollamaWindowsScript
@@ -297,20 +298,25 @@ private fun DoneSection(
     container: AppContainer, conn: SshConnection, withClaude: Boolean, version: String?, loggedIn: Boolean,
     tools: List<CliAgent>, navigate: (Dest) -> Unit, onDismiss: () -> Unit,
 ) {
-    fun login(cmd: String) {
-        container.terminalRequests.value = TerminalRequest(conn.id, cmd)
+    fun login(ids: List<String>) {
+        val steps = loginSteps(ids.joinToString("\n") { "HAS $it" })
+        if (steps.isEmpty()) return
+        container.terminalRequests.value = TerminalRequest(conn.id, logins = steps)
         onDismiss(); navigate(Dest.TERMINAL)
     }
+    val all = (if (withClaude && !loggedIn) listOf("claude") else emptyList()) + tools.map { it.id }
     Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        if (withClaude) ClaudeDone(version, loggedIn) { login("claude\r") }
+        if (all.size > 1) {
+            Button(onClick = { login(all) }, modifier = Modifier.fillMaxWidth()) { Text("Alle nacheinander anmelden (${all.size})") }
+            Text("Die Anmeldeseiten öffnen sich automatisch im Browser.", style = MaterialTheme.typography.bodySmall)
+        }
+        if (withClaude) ClaudeDone(version, loggedIn) { login(listOf("claude")) }
         if (tools.isNotEmpty()) {
             Text("Reserve-Modelle:", style = MaterialTheme.typography.titleSmall)
             tools.forEach { a ->
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                     Text("✓ ${a.label}", Modifier.weight(1f))
-                    val cmd = a.loginCommand
-                    if (cmd != null) OutlinedButton(onClick = { login(cmd) }) { Text("Anmelden") }
-                    else Text("bereit", color = MaterialTheme.colorScheme.primary)
+                    OutlinedButton(onClick = { login(listOf(a.id)) }) { Text("Anmelden") }
                 }
             }
             Text(
@@ -336,9 +342,9 @@ private fun ClaudeDone(version: String?, loggedIn: Boolean, onLogin: () -> Unit)
             "Mit deinem Claude-Abo anmelden:\n" +
                 "1. „Mit Claude-Abo anmelden“ öffnet das Terminal und startet Claude Code.\n" +
                 "2. Farbschema mit Enter bestätigen, dann „Claude account with subscription“ wählen.\n" +
-                "3. Oben auf das Link-Symbol tippen → „Öffnen“ → im Browser anmelden und autorisieren.\n" +
-                "4. Den angezeigten Code kopieren, im Terminal „Einfügen“ tippen und Enter drücken.\n" +
-                "5. Claude Code mit /exit beenden – fertig.",
+                "3. Die Anmeldeseite öffnet sich automatisch im Browser – anmelden und autorisieren.\n" +
+                "4. Den angezeigten Code kopieren, zurück in die App und in der Leiste „Code einfügen“ tippen.\n" +
+                "5. „Fertig“ tippen.",
             style = MaterialTheme.typography.bodySmall,
         )
         Button(onClick = onLogin) { Text("Mit Claude-Abo anmelden") }

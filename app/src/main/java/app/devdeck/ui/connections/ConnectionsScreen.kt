@@ -70,6 +70,11 @@ import app.devdeck.core.model.SshConnection
 import app.devdeck.core.nextcloud.WebDavFs
 import app.devdeck.ui.appContainer
 import app.devdeck.ui.Dest
+import app.devdeck.TerminalRequest
+import app.devdeck.core.claudecode.LOGIN_STATUS_SCRIPT
+import app.devdeck.core.claudecode.loginSteps
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -86,6 +91,7 @@ fun ConnectionsScreen(navigate: (Dest) -> Unit) {
     var setup by remember { mutableStateOf<SshConnection?>(null) }
     var setupOpen by remember { mutableStateOf(false) }
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
 
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
@@ -113,7 +119,35 @@ fun ConnectionsScreen(navigate: (Dest) -> Unit) {
             }
             LazyColumn(Modifier.weight(1f)) {
                 section("SSH-Server", store.ssh) { c ->
-                    ConnectionRow(Icons.Filled.Dns, c.name, "${c.username}@${c.host}:${c.port}") { editing = c }
+                    ConnectionRow(
+                        Icons.Filled.Dns, c.name, "${c.username}@${c.host}:${c.port}" + if (c.windows) " · Windows" else "",
+                        trailing = {
+                            SshMenu(
+                                onTerminal = {
+                                    container.terminalRequests.value = TerminalRequest(c.id)
+                                    navigate(Dest.TERMINAL)
+                                },
+                                onRelogin = {
+                                    Toast.makeText(context, "Prüfe, was auf ${c.name} installiert ist …", Toast.LENGTH_SHORT).show()
+                                    scope.launch {
+                                        try {
+                                            val steps = loginSteps(container.ssh.exec(c, LOGIN_STATUS_SCRIPT, timeoutSeconds = 30).stdout)
+                                            if (steps.isEmpty()) {
+                                                Toast.makeText(context, "Nichts zum Anmelden installiert – zuerst „Server einrichten“.", Toast.LENGTH_LONG).show()
+                                            } else {
+                                                container.terminalRequests.value = TerminalRequest(c.id, logins = steps)
+                                                navigate(Dest.TERMINAL)
+                                            }
+                                        } catch (e: Exception) {
+                                            Toast.makeText(context, "Verbindung fehlgeschlagen: ${e.message}", Toast.LENGTH_LONG).show()
+                                        }
+                                    }
+                                },
+                                onSetup = { setup = c; setupOpen = true },
+                                onEdit = { editing = c },
+                            )
+                        },
+                    ) { editing = c }
                 }
                 section("Nextcloud", store.nextcloud) { c ->
                     ConnectionRow(Icons.Filled.Cloud, c.name, "${c.username} · ${c.baseUrl}") { editing = c }
@@ -157,6 +191,20 @@ private fun <T> androidx.compose.foundation.lazy.LazyListScope.section(title: St
             modifier = Modifier.padding(start = 16.dp, top = 16.dp, bottom = 4.dp))
     }
     items(list) { row(it) }
+}
+
+@Composable
+private fun SshMenu(onTerminal: () -> Unit, onRelogin: () -> Unit, onSetup: () -> Unit, onEdit: () -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        IconButton(onClick = { open = true }) { Icon(Icons.Filled.MoreVert, "Aktionen") }
+        DropdownMenu(open, onDismissRequest = { open = false }) {
+            DropdownMenuItem(text = { Text("Terminal (neu) starten") }, onClick = { open = false; onTerminal() })
+            DropdownMenuItem(text = { Text("Alle neu anmelden") }, onClick = { open = false; onRelogin() })
+            DropdownMenuItem(text = { Text("Claude Code & KIs installieren …") }, onClick = { open = false; onSetup() })
+            DropdownMenuItem(text = { Text("Bearbeiten") }, onClick = { open = false; onEdit() })
+        }
+    }
 }
 
 @Composable

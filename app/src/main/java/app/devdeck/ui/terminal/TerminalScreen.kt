@@ -10,6 +10,7 @@ import android.widget.Toast
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material3.AlertDialog
+import kotlinx.coroutines.launch
 import androidx.compose.ui.platform.LocalContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.contentOrNull
@@ -76,6 +77,12 @@ fun TerminalScreen(navigate: (Dest) -> Unit) {
     var webView by remember { mutableStateOf<WebView?>(null) }
     var links by remember { mutableStateOf<List<String>?>(null) }
     val context = LocalContext.current
+    val login by vm.login.collectAsState()
+
+    LaunchedEffect(vm) {
+        launch { vm.openUrlEvents.collect { openLink(context, it) } }
+        vm.messages.collect { Toast.makeText(context, it, Toast.LENGTH_LONG).show() }
+    }
 
     val title = when (val s = status) {
         TerminalViewModel.Status.Idle -> "Terminal"
@@ -127,6 +134,9 @@ fun TerminalScreen(navigate: (Dest) -> Unit) {
                         DropdownMenuItem(text = { Text("Claude Code installieren") }, enabled = connected, onClick = {
                             menuOpen = false; vm.send("curl -fsSL https://claude.ai/install.sh | bash\r")
                         })
+                        DropdownMenuItem(text = { Text("Alle neu anmelden") }, enabled = status !is TerminalViewModel.Status.Idle, onClick = {
+                            menuOpen = false; vm.reloginAll()
+                        })
                         DropdownMenuItem(text = { Text("tmux-Sitzung (bleibt bei Abbruch erhalten)") }, enabled = connected, onClick = {
                             menuOpen = false; vm.send("tmux new -A -s devdeck\r")
                         })
@@ -134,6 +144,8 @@ fun TerminalScreen(navigate: (Dest) -> Unit) {
                 }
             },
         )
+
+        login?.let { LoginBanner(it, vm, context) }
 
         Box(Modifier.weight(1f).fillMaxWidth()) {
             TerminalWebView(
@@ -222,6 +234,41 @@ private fun decodeJsString(raw: String?): String =
 
 private fun decodeJsList(raw: String?): List<String> =
     runCatching { Json.parseToJsonElement(decodeJsString(raw)).jsonArray.map { it.jsonPrimitive.content } }.getOrDefault(emptyList())
+
+@Composable
+private fun LoginBanner(st: TerminalViewModel.LoginState, vm: TerminalViewModel, context: Context) {
+    Surface(color = MaterialTheme.colorScheme.primaryContainer, modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+            Text(
+                "Anmelden: ${st.step.label}" + if (st.steps.size > 1) "  (${st.index + 1}/${st.steps.size})" else "",
+                style = MaterialTheme.typography.titleSmall,
+            )
+            Text(
+                when {
+                    st.code != null -> "Anmeldeseite geöffnet. Dort diesen Code eingeben: ${st.code}"
+                    st.url != null -> "Anmeldeseite geöffnet. Nach dem Anmelden den angezeigten Code kopieren und hier „Code einfügen“ tippen. " +
+                        "Kommt kein Code, ist die Anmeldung schon fertig."
+                    else -> "Warte auf den Anmeldelink … Fragt das Programm etwas (z. B. Farbschema oder Anmeldeart), " +
+                        "mit ↑/↓ und Enter wählen: „Claude account with subscription“ bzw. „Login with Google“ / „Qwen OAuth“."
+                },
+                style = MaterialTheme.typography.bodySmall,
+            )
+            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                st.url?.let { u -> TextButton(onClick = { openLink(context, u) }) { Text("Seite öffnen") } }
+                st.code?.let { c ->
+                    TextButton(onClick = { copyText(context, c); Toast.makeText(context, "Code kopiert", Toast.LENGTH_SHORT).show() }) { Text("Code kopieren") }
+                }
+                TextButton(onClick = {
+                    val clip = clipboardText(context)
+                    if (clip == null) Toast.makeText(context, "Zwischenablage ist leer – Code auf der Anmeldeseite kopieren", Toast.LENGTH_LONG).show()
+                    else vm.pasteAndEnter(clip)
+                }) { Text("Code einfügen") }
+                TextButton(onClick = vm::nextLoginStep) { Text(if (st.isLast) "Fertig" else "Weiter") }
+                TextButton(onClick = vm::finishLogin) { Text("Abbrechen") }
+            }
+        }
+    }
+}
 
 @Composable
 private fun ExtraKeys(

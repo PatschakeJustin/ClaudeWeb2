@@ -10,6 +10,16 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
+import app.devdeck.core.claudecode.LOGIN_STATUS_SCRIPT
+import app.devdeck.core.claudecode.LoginStep
+import app.devdeck.core.claudecode.findAuthUrls
+import app.devdeck.core.claudecode.findDeviceCode
+import app.devdeck.core.claudecode.loginSteps
+import app.devdeck.core.claudecode.stripTerminalCodes
 import java.io.ByteArrayOutputStream
 
 class TerminalViewModel(private val container: AppContainer) : ViewModel() {
@@ -26,6 +36,26 @@ class TerminalViewModel(private val container: AppContainer) : ViewModel() {
     private val _status = MutableStateFlow<Status>(Status.Idle)
     val status: StateFlow<Status> = _status.asStateFlow()
 
+    /** Guided login in progress (null = none). */
+    data class LoginState(val steps: List<LoginStep>, val index: Int, val url: String? = null, val code: String? = null) {
+        val step get() = steps[index]
+        val isLast get() = index == steps.lastIndex
+    }
+
+    private val _login = MutableStateFlow<LoginState?>(null)
+    val login: StateFlow<LoginState?> = _login.asStateFlow()
+
+    /** Login pages to open in the browser. */
+    val openUrlEvents = MutableSharedFlow<String>(extraBufferCapacity = 4)
+    private val _messages = MutableSharedFlow<String>(extraBufferCapacity = 4)
+    val messages = _messages.asSharedFlow()
+
+    private val scan = StringBuilder()
+    private val openedUrls = mutableSetOf<String>()
+    @Volatile private var lastOutputAt = 0L
+    private var currentConn: SshConnection? = null
+    private var followUpJob: Job? = null
+
     private val _ctrlArmed = MutableStateFlow(false)
     val ctrlArmed: StateFlow<Boolean> = _ctrlArmed.asStateFlow()
 
@@ -37,7 +67,7 @@ class TerminalViewModel(private val container: AppContainer) : ViewModel() {
             container.terminalRequests.collect { req ->
                 if (req != null) {
                     container.terminalRequests.value = null
-                    container.connections.state.value.ssh.firstOrNull { it.id == req.connectionId }?.let { connect(it, req.input) }
+                    container.connections.state.value.ssh.firstOrNull { it.id == req.connectionId }?.let { connect(it, req.input, req.logins) }
                 }
             }
         }
@@ -59,6 +89,8 @@ class TerminalViewModel(private val container: AppContainer) : ViewModel() {
     fun detach(): Unit = synchronized(lock) { sink = null }
 
     private fun output(data: ByteArray): Unit = synchronized(lock) {
+        lastOutputAt = System.currentTimeMillis()
+        if (_login.value != null) scanForLogin(data)
         if (buffer.size() > MAX_BUFFER) {
             val keep = buffer.toByteArray().let { it.copyOfRange(it.size - MAX_BUFFER / 2, it.size) }
             buffer.reset(); buffer.write(keep)
@@ -70,15 +102,18 @@ class TerminalViewModel(private val container: AppContainer) : ViewModel() {
 
     private fun local(text: String) = output(text.replace("\n", "\r\n").toByteArray())
 
-    fun connect(conn: SshConnection, initialInput: String? = null) {
+    fun connect(conn: SshConnection, initialInput: String? = null, logins: List<LoginStep> = emptyList()) {
         disconnect()
+        currentConn = conn
+        followUpJob?.cancel()
+        _login.value = if (logins.isEmpty()) null else LoginState(logins, 0)
         synchronized(lock) { buffer.reset() }
         sink?.invoke("\u001bc".toByteArray()) // reset the visible terminal
         _status.value = Status.Connecting(conn.name)
         local("Verbinde mit ${conn.username}@${conn.host}:${conn.port} …\n")
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                shell = container.ssh.openShell(conn, cols, rows, object : ShellSession.Listener {
+                shell = container.ssh.openShell(conn, ptyCols(), rows, object : ShellSession.Listener {
                     override fun onOutput(data: ByteArray) { output(data) }
                     override fun onClosed(error: Throwable?) {
                         local("\n[Verbindung beendet${error?.message?.let { ": $it" } ?: ""}]\n")
@@ -87,6 +122,7 @@ class TerminalViewModel(private val container: AppContainer) : ViewModel() {
                 })
                 _status.value = Status.Connected(conn.name)
                 if (initialInput != null) shell?.write(initialInput)
+                if (logins.isNotEmpty()) startStep(0)
             } catch (e: Exception) {
                 local("Fehler: ${e.message ?: e.javaClass.simpleName}\n")
                 _status.value = Status.Closed(conn.name, e.message)
@@ -102,7 +138,7 @@ class TerminalViewModel(private val container: AppContainer) : ViewModel() {
     fun onResize(c: Int, r: Int) {
         if (c <= 0 || r <= 0) return
         cols = c; rows = r
-        shell?.resize(c, r)
+        shell?.resize(ptyCols(), r)
     }
 
     /** Input from the terminal view (keyboard). Applies the sticky Ctrl key. */
@@ -121,6 +157,74 @@ class TerminalViewModel(private val container: AppContainer) : ViewModel() {
         viewModelScope.launch(Dispatchers.IO) { runCatching { s.write(text) } }
     }
 
+    // While logging in the server sees a very wide terminal, so long login links arrive on one line
+    // (xterm wraps them only visually) and can be detected and opened.
+    private fun ptyCols() = if (_login.value != null) LOGIN_COLS else cols
+
+    private fun scanForLogin(data: ByteArray) {
+        scan.append(stripTerminalCodes(data.toString(Charsets.UTF_8)))
+        if (scan.length > 32_000) scan.delete(0, scan.length - 16_000)
+        val text = scan.toString()
+        val url = findAuthUrls(text).lastOrNull()
+        val code = findDeviceCode(text)
+        val cur = _login.value ?: return
+        if (url != cur.url || code != cur.code) _login.value = cur.copy(url = url ?: cur.url, code = code ?: cur.code)
+        if (url != null && openedUrls.add(url)) openUrlEvents.tryEmit(url)
+    }
+
+    private fun startStep(index: Int) {
+        val st = _login.value ?: return
+        val step = st.steps[index]
+        synchronized(lock) { scan.clear() }
+        _login.value = st.copy(index = index, url = null, code = null)
+        shell?.resize(ptyCols(), rows)
+        followUpJob?.cancel()
+        followUpJob = viewModelScope.launch(Dispatchers.IO) {
+            val s = shell ?: return@launch
+            if (index > 0) {
+                // Leave the previous tool (Ctrl-C twice exits Claude Code / Gemini / Qwen).
+                runCatching { s.write("\u0003"); delay(400); s.write("\u0003"); delay(900) }
+            }
+            runCatching { s.write(step.command) }
+            step.followUp?.let { follow ->
+                // Wait until the tool's UI has settled before typing /login or /auth.
+                val started = System.currentTimeMillis()
+                delay(1500)
+                while (System.currentTimeMillis() - lastOutputAt < 2500 && System.currentTimeMillis() - started < 25_000) delay(300)
+                runCatching { s.write(follow) }
+            }
+        }
+    }
+
+    fun nextLoginStep() {
+        val st = _login.value ?: return
+        if (st.isLast) finishLogin() else startStep(st.index + 1)
+    }
+
+    fun finishLogin() {
+        followUpJob?.cancel()
+        _login.value = null
+        shell?.resize(cols, rows)
+        _messages.tryEmit("Anmeldung beendet. Claude Code und Gemini/Qwen mit /exit bzw. Ctrl-C zweimal verlassen.")
+    }
+
+    /** Pastes the clipboard text (e.g. the code from the login page) and presses Enter. */
+    fun pasteAndEnter(text: String) = send(text.trim() + "\r")
+
+    /** Checks what is installed on the current server and logs in to everything again. */
+    fun reloginAll() {
+        val conn = currentConn ?: return
+        viewModelScope.launch {
+            try {
+                val steps = loginSteps(container.ssh.exec(conn, LOGIN_STATUS_SCRIPT, timeoutSeconds = 30).stdout)
+                if (steps.isEmpty()) _messages.tryEmit("Auf ${conn.name} ist nichts zum Anmelden installiert (Verbindungen → Server einrichten).")
+                else connect(conn, null, steps)
+            } catch (e: Exception) {
+                _messages.tryEmit("Fehler: ${e.message}")
+            }
+        }
+    }
+
     fun toggleCtrl() { _ctrlArmed.value = !_ctrlArmed.value }
 
     fun setFontSize(size: Int) = container.settings.update { it.copy(terminalFontSize = size.coerceIn(8, 28)) }
@@ -129,5 +233,8 @@ class TerminalViewModel(private val container: AppContainer) : ViewModel() {
         disconnect()
     }
 
-    companion object { private const val MAX_BUFFER = 1 shl 20 }
+    companion object {
+        private const val MAX_BUFFER = 1 shl 20
+        private const val LOGIN_COLS = 500
+    }
 }
