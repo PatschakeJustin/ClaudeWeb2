@@ -46,6 +46,8 @@ data class AppSettings(
     /** Backend used automatically when the main one fails ("" = none). Same ids as [agentMode]. */
     val reserveMode: String = "",
     val ollamaModel: String = "qwen2.5-coder:7b",
+    /** Look for a new version when the app starts. */
+    val autoUpdateCheck: Boolean = true,
 ) {
     companion object {
         const val MODE_CLAUDE_CODE = "claude_code"

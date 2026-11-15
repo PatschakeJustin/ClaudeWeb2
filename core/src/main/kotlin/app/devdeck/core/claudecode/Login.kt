@@ -26,16 +26,40 @@ fun loginSteps(statusOutput: String): List<LoginStep> {
 private val URL = Regex("https?://[^\\s\"'<>\\u001b]+")
 private val AUTH_HINT = Regex("oauth|authorize|/login|signin|sign_in|device|auth\\.|accounts\\.google|/code", RegexOption.IGNORE_CASE)
 
-/** Login-looking URLs in terminal output (ANSI already stripped), in order of appearance. */
+/**
+ * Login-looking URLs in terminal output (ANSI already stripped), in order of appearance. A URL at the very end
+ * of [text] is ignored because it may still be incomplete (output arrives in chunks).
+ */
 fun findAuthUrls(text: String): List<String> =
-    URL.findAll(text).map { it.value.trimEnd('.', ',', ')', ';', ':') }.filter { AUTH_HINT.containsMatchIn(it) }.distinct().toList()
+    URL.findAll(text)
+        .filter { it.range.last + 1 < text.length }
+        .map { it.value.trimEnd('.', ',', ')', ';', ':', '…') }
+        .filter { AUTH_HINT.containsMatchIn(it) && !it.endsWith("...") }
+        .distinct().toList()
 
 private val DEVICE_CODE = Regex("\\b([A-Z0-9]{4,5}-[A-Z0-9]{4,5})\\b")
 
 /** One-time device codes such as `ABCD-1234` that the user has to type on the login page. */
 fun findDeviceCode(text: String): String? = DEVICE_CODE.findAll(text).lastOrNull()?.groupValues?.get(1)
 
-private val ANSI_RE = Regex("\u001B\\[[0-9;?<>=]*[ -/]*[@-~]|\u001B\\][^\u0007\u001B]*(\u0007|\u001B\\\\)|\u001B[()][A-Za-z0-9]|\u001B[=>78MDEHc]|\r")
+private val CSI = Regex("\u001B\\[([0-9;?<>=]*)[ -/]*([@-~])")
+private val OSC = Regex("\u001B\\][^\u0007\u001B]*(\u0007|\u001B\\\\)")
+private val OTHER_ESC = Regex("\u001B[()][A-Za-z0-9]|\u001B[=>78MDEHc]")
 
-/** Removes ANSI escape sequences (colours, cursor moves, OSC titles). */
-fun stripTerminalCodes(s: String): String = s.replace(ANSI_RE, "")
+/**
+ * Turns raw terminal output into plain text: colours and titles are removed, cursor moves become
+ * spaces or line breaks so that words drawn next to each other by a TUI do not run together.
+ */
+fun stripTerminalCodes(s: String): String {
+    var t = OSC.replace(s, "")
+    t = CSI.replace(t) { m ->
+        val n = m.groupValues[1].substringBefore(';').toIntOrNull() ?: 1
+        when (m.groupValues[2]) {
+            "C" -> " ".repeat(n.coerceIn(1, 200))
+            "A", "B", "E", "F", "H", "f", "d", "J" -> "\n"
+            "K", "G" -> " "
+            else -> ""
+        }
+    }
+    return OTHER_ESC.replace(t, "").replace("\r", "")
+}

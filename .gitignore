@@ -8,3 +8,5 @@ captures/
 *.apk
 *.keystore
 !debug.keystore
+
+!app/signing/*.jks

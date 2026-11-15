@@ -162,9 +162,10 @@ class TerminalViewModel(private val container: AppContainer) : ViewModel() {
     private fun ptyCols() = if (_login.value != null) LOGIN_COLS else cols
 
     private fun scanForLogin(data: ByteArray) {
-        scan.append(stripTerminalCodes(data.toString(Charsets.UTF_8)))
-        if (scan.length > 32_000) scan.delete(0, scan.length - 16_000)
-        val text = scan.toString()
+        // Keep the raw output and strip it as a whole: escape sequences and URLs may be split across chunks.
+        scan.append(data.toString(Charsets.UTF_8))
+        if (scan.length > 64_000) scan.delete(0, scan.length - 32_000)
+        val text = stripTerminalCodes(scan.toString())
         val url = findAuthUrls(text).lastOrNull()
         val code = findDeviceCode(text)
         val cur = _login.value ?: return

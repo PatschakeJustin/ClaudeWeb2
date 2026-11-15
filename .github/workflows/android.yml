@@ -45,8 +45,12 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          NOTES=$(git log -1 --pretty=%s | sed 's/"/\\"/g')
+          printf '{"versionCode": %d, "versionName": "0.5.%d", "apk": "Humantize-DevApp.apk", "notes": "%s"}\n' \
+            $((100 + GITHUB_RUN_NUMBER)) "$GITHUB_RUN_NUMBER" "$NOTES" > version.json
+          cat version.json
           gh release delete latest --cleanup-tag --yes || true
-          gh release create latest Humantize-DevApp.apk --prerelease --target "$GITHUB_SHA" \
+          gh release create latest Humantize-DevApp.apk version.json --prerelease --target "$GITHUB_SHA" \
             --title "Humantize DevApp Mobile (neuester Build)" \
             --notes "Automatisch gebaut aus ${GITHUB_SHA::7} (Branch ${GITHUB_REF_NAME}). APK auf dem Android-Gerät öffnen und installieren."
 

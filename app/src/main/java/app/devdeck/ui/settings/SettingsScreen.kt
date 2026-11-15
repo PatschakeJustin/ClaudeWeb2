@@ -30,6 +30,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.ui.unit.dp
 import app.devdeck.ui.appContainer
 
@@ -100,7 +101,16 @@ fun SettingsScreen() {
             ) { v -> repo.update { it.copy(refusalFallback = v) } }
 
             HorizontalDivider()
-            Text("Humantize DevApp Mobile 0.4.0", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("Updates", style = MaterialTheme.typography.titleMedium)
+            SwitchRow(
+                "Beim Start nach Updates suchen",
+                "Findet die App eine neue Version, fragt sie, ob sie aktualisieren darf.",
+                s.autoUpdateCheck,
+            ) { v -> repo.update { it.copy(autoUpdateCheck = v) } }
+            val updater = appContainer().updater
+            OutlinedButton(onClick = { updater.check(manual = true) }) { Text("Jetzt nach Updates suchen") }
+            Text("Humantize DevApp Mobile ${updater.installedVersion}", style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }

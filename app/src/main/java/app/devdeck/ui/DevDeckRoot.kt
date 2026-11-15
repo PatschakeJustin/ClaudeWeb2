@@ -62,6 +62,7 @@ fun appContainer(): AppContainer = (LocalContext.current.applicationContext as D
 @Composable
 fun DevDeckRoot() {
     var dest by rememberSaveable { mutableStateOf(Dest.AGENT) }
+    UpdateDialog()
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val wide = maxWidth >= 600.dp
         CompositionLocalProvider(LocalWideLayout provides wide) {

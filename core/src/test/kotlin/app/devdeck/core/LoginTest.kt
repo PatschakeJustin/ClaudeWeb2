@@ -34,3 +34,27 @@ class LoginTest {
         assertEquals(emptyList(), findAuthUrls("see https://github.com/foo/bar for docs"))
     }
 }
+
+class LoginEdgeCaseTest {
+    private val url = "https://claude.ai/oauth/authorize?code=true&client_id=9d1c&response_type=code&redirect_uri=https%3A%2F%2Fconsole.anthropic.com%2Foauth%2Fcode%2Fcallback&scope=org%3Acreate_api_key+user%3Ainference&code_challenge=Ab-_c&code_challenge_method=S256&state=Zz"
+
+    @Test fun incompleteUrlAtEndIsIgnored() {
+        val first = "Use the url below to sign in:\n\n" + url.take(80)
+        assertEquals(emptyList(), findAuthUrls(stripTerminalCodes(first)))
+        assertEquals(listOf(url), findAuthUrls(stripTerminalCodes(first + url.drop(80) + "\n")))
+    }
+
+    @Test fun escapeSplitAcrossChunksDoesNotLeakIntoUrl() {
+        // Accumulate raw chunks first, strip afterwards (what the app does now).
+        val raw = "\u001b[38;5;153m" + url + "\u001b[39m\u001b[1C\u001b[2mPaste code here\u001b[22m"
+        val chunks = listOf(raw.take(15), raw.drop(15).take(200), raw.drop(215))
+        assertEquals(listOf(url), findAuthUrls(stripTerminalCodes(chunks.joinToString(""))))
+    }
+
+    @Test fun cursorMovesBecomeSeparators() {
+        assertEquals(listOf(url), findAuthUrls(stripTerminalCodes(url + "\u001b[3CPaste")))
+        assertEquals(listOf(url), findAuthUrls(stripTerminalCodes("\u001b[5;1H" + url + "\u001b[6;1H>")))
+        // OSC 8 hyperlinks: only the visible text remains.
+        assertEquals(listOf(url), findAuthUrls(stripTerminalCodes("\u001b]8;;$url\u0007$url\u001b]8;;\u0007\n")))
+    }
+}

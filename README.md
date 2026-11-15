@@ -24,7 +24,7 @@ Alle Zugangsdaten werden mit einem Schlüssel aus dem Android Keystore (AES-256-
 
 **Direkter Download (neuester Build):** https://github.com/PatschakeJustin/ClaudeWeb2/releases/download/latest/Humantize-DevApp.apk
 
-Die Datei auf dem Android-Gerät öffnen und installieren. Dafür muss „Installation aus unbekannten Quellen“ für den Browser erlaubt sein. Bei einem privaten Repository musst du im Browser bei GitHub angemeldet sein.
+Die Datei auf dem Android-Gerät öffnen und installieren. **Updates:** Die App sucht beim Start nach einer neuen Version und fragt, ob sie aktualisieren darf (abschaltbar in den Einstellungen, dort auch „Jetzt nach Updates suchen“). Alle Builds sind mit demselben Schlüssel (`app/signing/`) signiert; eigener privater Schlüssel über die Umgebungsvariablen `HUMANTIZE_KEYSTORE*` (z. B. als GitHub-Secrets). Dafür muss „Installation aus unbekannten Quellen“ für den Browser erlaubt sein. Bei einem privaten Repository musst du im Browser bei GitHub angemeldet sein.
 
 Voraussetzung: Android 8.0 oder neuer.
 

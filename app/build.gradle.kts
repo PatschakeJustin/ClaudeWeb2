@@ -9,19 +9,35 @@ android {
     namespace = "app.devdeck"
     compileSdk = 36
 
+    // Every CI build gets a higher version so the in-app updater can detect it.
+    val buildNumber = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 0
+
     defaultConfig {
         applicationId = "app.devdeck"
         minSdk = 26
         targetSdk = 36
-        versionCode = 4
-        versionName = "0.4.0"
+        versionCode = 100 + buildNumber
+        versionName = "0.5.$buildNumber"
+    }
+
+    // One fixed key for all builds; otherwise Android refuses to install updates over the old version.
+    // Override with the environment variables (e.g. from GitHub secrets) to use a private key.
+    signingConfigs {
+        create("humantize") {
+            storeFile = file(System.getenv("HUMANTIZE_KEYSTORE") ?: "signing/humantize-release.jks")
+            storePassword = System.getenv("HUMANTIZE_KEYSTORE_PASSWORD") ?: "humantize-devapp"
+            keyAlias = System.getenv("HUMANTIZE_KEY_ALIAS") ?: "humantize"
+            keyPassword = System.getenv("HUMANTIZE_KEY_PASSWORD") ?: "humantize-devapp"
+        }
     }
 
     buildTypes {
+        debug {
+            signingConfig = signingConfigs.getByName("humantize")
+        }
         release {
             isMinifyEnabled = false
-            // Signed with the debug key so the CI build can be installed directly.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("humantize")
         }
     }
 
@@ -32,6 +48,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     packaging {
