@@ -78,3 +78,46 @@ fun stripTerminalCodes(s: String): String {
     }
     return OTHER_ESC.replace(t, "").replace("\r", "")
 }
+
+private val OSC8 = Regex("\u001B\\]8;[^;\u0007\u001B]*;(https?://[^\u0007\u001B]+)(\u0007|\u001B\\\\)")
+private val URL_TAIL = Regex("^[A-Za-z0-9%&=?/_.:~+#@!$*,;\\-]+$")
+private val URL_AT_END = Regex("https?://\\S+$")
+
+/** Full URLs carried in OSC 8 hyperlinks (`ESC ] 8 ; ; URL BEL`) – complete even if the visible text wraps. */
+fun osc8Urls(raw: String): List<String> = OSC8.findAll(raw).map { it.groupValues[1] }.distinct().toList()
+
+/**
+ * TUIs like Claude Code wrap long lines themselves (hard line breaks, often indented). If a line ends in a URL
+ * and the following lines consist only of URL characters, they are glued back together.
+ */
+fun joinWrappedUrls(text: String): String {
+    val lines = text.split("\n")
+    val out = mutableListOf<String>()
+    var i = 0
+    while (i < lines.size) {
+        var line = lines[i].trimEnd()
+        if (URL_AT_END.containsMatchIn(line)) {
+            while (i + 1 < lines.size) {
+                val next = lines[i + 1].trim()
+                if (next.isEmpty() || next.startsWith("http") || !URL_TAIL.matches(next)) break
+                line += next
+                i++
+            }
+        }
+        out += line
+        i++
+    }
+    return out.joinToString("\n")
+}
+
+/**
+ * Login links in raw terminal output. During a guided login ([anyUrl]) every complete link counts,
+ * otherwise only login-looking ones.
+ */
+fun extractLoginUrls(raw: String, anyUrl: Boolean): List<String> {
+    val text = joinWrappedUrls(stripTerminalCodes(raw))
+    val visible = if (anyUrl) findCompleteUrls(text) else findAuthUrls(text)
+    val hidden = osc8Urls(raw).filter { anyUrl || AUTH_HINT.containsMatchIn(it) }
+    // Prefer the longer variant when the visible text is a truncated copy of a hidden link.
+    return (visible + hidden).filter { u -> (visible + hidden).none { o -> o != u && o.startsWith(u) } }.distinct()
+}

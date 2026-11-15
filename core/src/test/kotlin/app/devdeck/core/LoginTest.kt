@@ -68,3 +68,26 @@ class LoginPickTest {
         assertEquals("https://x.example/page", app.devdeck.core.claudecode.pickLoginUrl(listOf("https://x.example/page")))
     }
 }
+
+class LoginWrapTest {
+    private val url = "https://claude.ai/oauth/authorize?code=true&client_id=9d1c250a-e61b-44d9-88ed-5944d1962f5e&response_type=code&redirect_uri=https%3A%2F%2Fconsole.anthropic.com%2Foauth%2Fcode%2Fcallback&scope=org%3Acreate_api_key+user%3Aprofile+user%3Ainference&code_challenge=Xy-_9&code_challenge_method=S256&state=Abc"
+
+    @Test fun hardWrappedIndentedUrlIsRejoined() {
+        // Claude Code draws inside a box of its own width: hard line breaks plus indentation.
+        val parts = url.chunked(70)
+        val raw = " Browser didn't open? Use the url below to sign in (c to copy)\r\n\r\n" +
+            parts.joinToString("\r\n") { "  \u001b[2m$it\u001b[22m" } + "\r\n\r\n Paste code here if prompted > "
+        assertEquals(listOf(url), app.devdeck.core.claudecode.extractLoginUrls(raw, anyUrl = false))
+        assertEquals(listOf(url), app.devdeck.core.claudecode.extractLoginUrls(raw, anyUrl = true))
+    }
+
+    @Test fun osc8HyperlinkGivesFullUrl() {
+        val raw = "Sign in: \u001b]8;;$url\u0007${url.take(60)}…\u001b]8;;\u0007\r\n> "
+        assertEquals(listOf(url), app.devdeck.core.claudecode.extractLoginUrls(raw, anyUrl = true))
+    }
+
+    @Test fun normalTextUnchanged() {
+        val t = "see https://example.com/docs\nand more text here\n"
+        assertEquals(t.trimEnd('\n') + "\n", app.devdeck.core.claudecode.joinWrappedUrls(t).let { it.trimEnd('\n') + "\n" })
+    }
+}

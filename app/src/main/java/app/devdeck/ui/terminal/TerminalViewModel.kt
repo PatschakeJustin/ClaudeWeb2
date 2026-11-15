@@ -16,7 +16,7 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import app.devdeck.core.claudecode.LOGIN_STATUS_SCRIPT
 import app.devdeck.core.claudecode.LoginStep
-import app.devdeck.core.claudecode.findCompleteUrls
+import app.devdeck.core.claudecode.extractLoginUrls
 import app.devdeck.core.claudecode.pickLoginUrl
 import app.devdeck.core.claudecode.findDeviceCode
 import app.devdeck.core.claudecode.loginSteps
@@ -42,6 +42,12 @@ class TerminalViewModel(private val container: AppContainer) : ViewModel() {
         val step get() = steps[index]
         val isLast get() = index == steps.lastIndex
     }
+
+    /** Login link / one-time code currently visible in the terminal (detected in any session, not only guided logins). */
+    data class Detected(val url: String? = null, val code: String? = null)
+
+    private val _detected = MutableStateFlow(Detected())
+    val detected: StateFlow<Detected> = _detected.asStateFlow()
 
     private val _login = MutableStateFlow<LoginState?>(null)
     val login: StateFlow<LoginState?> = _login.asStateFlow()
@@ -89,7 +95,7 @@ class TerminalViewModel(private val container: AppContainer) : ViewModel() {
 
     private fun output(data: ByteArray): Unit = synchronized(lock) {
         lastOutputAt = System.currentTimeMillis()
-        if (_login.value != null) scanForLogin(data)
+        scanForLogin(data)
         if (buffer.size() > MAX_BUFFER) {
             val keep = buffer.toByteArray().let { it.copyOfRange(it.size - MAX_BUFFER / 2, it.size) }
             buffer.reset(); buffer.write(keep)
@@ -106,6 +112,8 @@ class TerminalViewModel(private val container: AppContainer) : ViewModel() {
         currentConn = conn
         followUpJob?.cancel()
         _login.value = if (logins.isEmpty()) null else LoginState(logins, 0)
+        synchronized(lock) { scan.clear() }
+        _detected.value = Detected()
         synchronized(lock) { buffer.reset() }
         sink?.invoke("\u001bc".toByteArray()) // reset the visible terminal
         _status.value = Status.Connecting(conn.name)
@@ -161,23 +169,29 @@ class TerminalViewModel(private val container: AppContainer) : ViewModel() {
     private fun ptyCols() = if (_login.value != null) LOGIN_COLS else cols
 
     private fun scanForLogin(data: ByteArray) {
-        // Keep the raw output and strip it as a whole: escape sequences and URLs may be split across chunks.
+        // Keep the raw output and evaluate it as a whole: escape sequences and URLs may be split across chunks,
+        // TUIs wrap long links themselves, and OSC 8 hyperlinks carry the full address.
         scan.append(data.toString(Charsets.UTF_8))
         if (scan.length > 64_000) scan.delete(0, scan.length - 32_000)
-        val text = stripTerminalCodes(scan.toString())
-        updateLogin(pickLoginUrl(findCompleteUrls(text)), findDeviceCode(text))
+        val raw = scan.toString()
+        val guided = _login.value != null
+        val url = pickLoginUrl(extractLoginUrls(raw, anyUrl = guided))
+        val code = if (guided) findDeviceCode(stripTerminalCodes(raw)) else null
+        updateDetected(url, code)
     }
 
-    /** Links found in the visible terminal buffer (second source, also catches soft-wrapped links). */
+    /** Links found in the rendered terminal buffer (second source during a guided login). */
     fun onBufferLinks(urls: List<String>) {
-        if (_login.value?.url == null) updateLogin(pickLoginUrl(urls), null)
+        if (_login.value != null && _detected.value.url == null) updateDetected(pickLoginUrl(urls), null)
     }
 
-    private fun updateLogin(url: String?, code: String?) {
-        val cur = _login.value ?: return
-        val next = cur.copy(url = url ?: cur.url, code = code ?: cur.code)
-        if (next != cur) _login.value = next
+    private fun updateDetected(url: String?, code: String?) {
+        val cur = _detected.value
+        val next = Detected(url ?: cur.url, code ?: cur.code)
+        if (next != cur) _detected.value = next
     }
+
+    fun dismissDetected() { _detected.value = Detected() }
 
     /** True the first time a login page should be opened (the screen opens it in the browser). */
     fun shouldOpen(url: String): Boolean = synchronized(openedUrls) { openedUrls.add(url) }
@@ -186,7 +200,8 @@ class TerminalViewModel(private val container: AppContainer) : ViewModel() {
         val st = _login.value ?: return
         val step = st.steps[index]
         synchronized(lock) { scan.clear() }
-        _login.value = st.copy(index = index, url = null, code = null)
+        _detected.value = Detected()
+        _login.value = st.copy(index = index)
         shell?.resize(ptyCols(), rows)
         followUpJob?.cancel()
         followUpJob = viewModelScope.launch(Dispatchers.IO) {

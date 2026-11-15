@@ -83,7 +83,8 @@ fun TerminalScreen(navigate: (Dest) -> Unit) {
         vm.messages.collect { Toast.makeText(context, it, Toast.LENGTH_LONG).show() }
     }
     // Open the login page as soon as it is known (state, not a one-shot event, so it is never missed).
-    val loginUrl = login?.url
+    val detected by vm.detected.collectAsState()
+    val loginUrl = detected.url
     LaunchedEffect(loginUrl) {
         if (loginUrl != null && vm.shouldOpen(loginUrl)) openLink(context, loginUrl)
     }
@@ -157,7 +158,9 @@ fun TerminalScreen(navigate: (Dest) -> Unit) {
             },
         )
 
-        login?.let { LoginBanner(it, vm, context) }
+        val st = login
+        if (st != null) LoginBanner(st, detected, vm, context)
+        else detected.url?.let { DetectedBanner(it, vm, context) }
 
         Box(Modifier.weight(1f).fillMaxWidth()) {
             TerminalWebView(
@@ -220,10 +223,27 @@ fun TerminalScreen(navigate: (Dest) -> Unit) {
     }
 }
 
+/**
+ * Opens [url] in the default web browser – explicitly, so that apps claiming the domain (e.g. the Claude app
+ * for claude.ai) do not swallow the login page.
+ */
 private fun openLink(context: Context, url: String) {
     if (!url.startsWith("https://") && !url.startsWith("http://")) return
+    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+        .addCategory(Intent.CATEGORY_BROWSABLE)
+        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    val browser = runCatching {
+        val probe = Intent(Intent.ACTION_VIEW, Uri.parse("https://example.com")).addCategory(Intent.CATEGORY_BROWSABLE)
+        context.packageManager.resolveActivity(probe, android.content.pm.PackageManager.MATCH_DEFAULT_ONLY)
+            ?.activityInfo?.packageName?.takeIf { it != "android" }
+    }.getOrNull()
     try {
-        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        Handler(Looper.getMainLooper()).post { Toast.makeText(context, "Anmeldeseite wird im Browser geöffnet …", Toast.LENGTH_SHORT).show() }
+        try {
+            context.startActivity(if (browser != null) Intent(intent).setPackage(browser) else intent)
+        } catch (_: Exception) {
+            context.startActivity(intent)
+        }
     } catch (_: Exception) {
         copyText(context, url)
         Handler(Looper.getMainLooper()).post { Toast.makeText(context, "Kein Browser gefunden – Link kopiert", Toast.LENGTH_SHORT).show() }
@@ -248,7 +268,26 @@ private fun decodeJsList(raw: String?): List<String> =
     runCatching { Json.parseToJsonElement(decodeJsString(raw)).jsonArray.map { it.jsonPrimitive.content } }.getOrDefault(emptyList())
 
 @Composable
-private fun LoginBanner(st: TerminalViewModel.LoginState, vm: TerminalViewModel, context: Context) {
+private fun DetectedBanner(url: String, vm: TerminalViewModel, context: Context) {
+    Surface(color = MaterialTheme.colorScheme.primaryContainer, modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
+            Text("Anmeldelink erkannt", style = MaterialTheme.typography.titleSmall)
+            Text(url, style = MaterialTheme.typography.bodySmall, fontFamily = MonoFamily, maxLines = 2)
+            Row(Modifier.horizontalScroll(rememberScrollState())) {
+                TextButton(onClick = { openLink(context, url) }) { Text("Seite öffnen") }
+                TextButton(onClick = { copyText(context, url); Toast.makeText(context, "Link kopiert", Toast.LENGTH_SHORT).show() }) { Text("Link kopieren") }
+                TextButton(onClick = {
+                    val clip = clipboardText(context)
+                    if (clip == null) Toast.makeText(context, "Zwischenablage ist leer", Toast.LENGTH_SHORT).show() else vm.pasteAndEnter(clip)
+                }) { Text("Code einfügen") }
+                TextButton(onClick = vm::dismissDetected) { Text("Schließen") }
+            }
+        }
+    }
+}
+
+@Composable
+private fun LoginBanner(st: TerminalViewModel.LoginState, det: TerminalViewModel.Detected, vm: TerminalViewModel, context: Context) {
     Surface(color = MaterialTheme.colorScheme.primaryContainer, modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
             Text(
@@ -257,8 +296,8 @@ private fun LoginBanner(st: TerminalViewModel.LoginState, vm: TerminalViewModel,
             )
             Text(
                 when {
-                    st.code != null -> "Anmeldeseite geöffnet. Dort diesen Code eingeben: ${st.code}"
-                    st.url != null -> "Anmeldeseite geöffnet. Nach dem Anmelden den angezeigten Code kopieren und hier „Code einfügen“ tippen. " +
+                    det.code != null -> "Anmeldeseite geöffnet. Dort diesen Code eingeben: ${det.code}"
+                    det.url != null -> "Anmeldeseite geöffnet. Nach dem Anmelden den angezeigten Code kopieren und hier „Code einfügen“ tippen. " +
                         "Kommt kein Code, ist die Anmeldung schon fertig."
                     else -> "Warte auf den Anmeldelink … Fragt das Programm etwas (z. B. Farbschema oder Anmeldeart), " +
                         "mit ↑/↓ und Enter wählen: „Claude account with subscription“ bzw. „Login with Google“ / „Qwen OAuth“."
@@ -266,8 +305,11 @@ private fun LoginBanner(st: TerminalViewModel.LoginState, vm: TerminalViewModel,
                 style = MaterialTheme.typography.bodySmall,
             )
             Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                st.url?.let { u -> TextButton(onClick = { openLink(context, u) }) { Text("Seite öffnen") } }
-                st.code?.let { c ->
+                det.url?.let { u ->
+                    TextButton(onClick = { openLink(context, u) }) { Text("Seite öffnen") }
+                    TextButton(onClick = { copyText(context, u); Toast.makeText(context, "Link kopiert", Toast.LENGTH_SHORT).show() }) { Text("Link kopieren") }
+                }
+                det.code?.let { c ->
                     TextButton(onClick = { copyText(context, c); Toast.makeText(context, "Code kopiert", Toast.LENGTH_SHORT).show() }) { Text("Code kopieren") }
                 }
                 TextButton(onClick = {
