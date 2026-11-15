@@ -367,8 +367,8 @@ private fun EmptyState(hasKey: Boolean, connectionNames: List<String>, onSetup: 
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Image(
-            painterResource(R.drawable.ic_launcher_foreground), contentDescription = null,
-            modifier = Modifier.size(96.dp).clip(RoundedCornerShape(24.dp)).background(Color(0xFF14213D)),
+            painterResource(R.mipmap.ic_launcher_foreground), contentDescription = null,
+            modifier = Modifier.size(96.dp).clip(RoundedCornerShape(24.dp)).background(Color(0xFF1D0F22)),
         )
         Text("Humantize DevApp", style = MaterialTheme.typography.titleLarge)
         Text("Was soll die KI für dich erledigen?", style = MaterialTheme.typography.bodyLarge)

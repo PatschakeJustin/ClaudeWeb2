@@ -1,6 +1,6 @@
 # Humantize DevApp Mobile
 
-<img src="branding/humantize-logo.svg" width="120" alt="Humantize-Logo">
+<img src="branding/humantize-logo-512.png" width="140" alt="Humantize-Logo">
 
 Android-App (Smartphone und Tablet) zum Programmieren unterwegs, mit Claude als Coding-Agent.
 
