@@ -1,0 +1,60 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<link rel="stylesheet" href="xterm.css">
+<style>
+  html, body { margin: 0; height: 100%; background: #14161c; overflow: hidden; }
+  #term { position: absolute; inset: 0; padding: 4px 4px 0 6px; }
+</style>
+</head>
+<body>
+<div id="term"></div>
+<script src="xterm.js"></script>
+<script src="addon-fit.js"></script>
+<script>
+  const TermClass = (window.Terminal && window.Terminal.Terminal) || window.Terminal;
+  const FitClass = (window.FitAddon && window.FitAddon.FitAddon) || window.FitAddon;
+  const bridge = window.Bridge || { onInput() {}, onResize() {}, onReady() {} };
+
+  const term = new TermClass({
+    fontFamily: 'monospace',
+    fontSize: 13,
+    cursorBlink: true,
+    scrollback: 10000,
+    theme: { background: '#14161c', foreground: '#e6e6e6', cursor: '#d97757' },
+  });
+  const fit = new FitClass();
+  term.loadAddon(fit);
+  term.open(document.getElementById('term'));
+
+  let lastCols = 0, lastRows = 0;
+  function doFit() {
+    try { fit.fit(); } catch (e) {}
+    if (term.cols !== lastCols || term.rows !== lastRows) {
+      lastCols = term.cols; lastRows = term.rows;
+      bridge.onResize(term.cols, term.rows);
+    }
+  }
+  new ResizeObserver(doFit).observe(document.getElementById('term'));
+  term.onData(d => bridge.onInput(d));
+
+  function b64ToBytes(b64) {
+    const s = atob(b64);
+    const out = new Uint8Array(s.length);
+    for (let i = 0; i < s.length; i++) out[i] = s.charCodeAt(i);
+    return out;
+  }
+  window.termWrite = b64 => term.write(b64ToBytes(b64));
+  window.termReset = () => term.reset();
+  window.termFocus = () => term.focus();
+  window.termSetFontSize = size => { term.options.fontSize = size; doFit(); };
+  window.termSize = () => term.cols + 'x' + term.rows;
+
+  doFit();
+  bridge.onReady(term.cols, term.rows);
+  term.focus();
+</script>
+</body>
+</html>
