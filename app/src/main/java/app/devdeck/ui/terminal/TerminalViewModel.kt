@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.asSharedFlow
 import app.devdeck.core.claudecode.LOGIN_STATUS_SCRIPT
 import app.devdeck.core.claudecode.LoginStep
 import app.devdeck.core.claudecode.extractLoginUrls
+import app.devdeck.core.claudecode.loginSucceeded
 import app.devdeck.core.claudecode.pickLoginUrl
 import app.devdeck.core.claudecode.findDeviceCode
 import app.devdeck.core.claudecode.loginSteps
@@ -38,7 +39,7 @@ class TerminalViewModel(private val container: AppContainer) : ViewModel() {
     val status: StateFlow<Status> = _status.asStateFlow()
 
     /** Guided login in progress (null = none). */
-    data class LoginState(val steps: List<LoginStep>, val index: Int, val url: String? = null, val code: String? = null) {
+    data class LoginState(val steps: List<LoginStep>, val index: Int, val done: Boolean = false) {
         val step get() = steps[index]
         val isLast get() = index == steps.lastIndex
     }
@@ -120,13 +121,7 @@ class TerminalViewModel(private val container: AppContainer) : ViewModel() {
         local("Verbinde mit ${conn.username}@${conn.host}:${conn.port} …\n")
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                shell = container.ssh.openShell(conn, ptyCols(), rows, object : ShellSession.Listener {
-                    override fun onOutput(data: ByteArray) { output(data) }
-                    override fun onClosed(error: Throwable?) {
-                        local("\n[Verbindung beendet${error?.message?.let { ": $it" } ?: ""}]\n")
-                        _status.value = Status.Closed(conn.name, error?.message)
-                    }
-                })
+                shell = openShellFor(conn)
                 _status.value = Status.Connected(conn.name)
                 if (initialInput != null) shell?.write(initialInput)
                 if (logins.isNotEmpty()) startStep(0)
@@ -135,6 +130,21 @@ class TerminalViewModel(private val container: AppContainer) : ViewModel() {
                 _status.value = Status.Closed(conn.name, e.message)
             }
         }
+    }
+
+    // Each shell gets a generation number; events of an old shell (closed on purpose) are ignored.
+    @Volatile private var generation = 0
+
+    private suspend fun openShellFor(conn: SshConnection): ShellSession {
+        val gen = ++generation
+        return container.ssh.openShell(conn, ptyCols(), rows, object : ShellSession.Listener {
+            override fun onOutput(data: ByteArray) { if (gen == generation) output(data) }
+            override fun onClosed(error: Throwable?) {
+                if (gen != generation) return
+                local("\n[Verbindung beendet${error?.message?.let { ": $it" } ?: ""}]\n")
+                _status.value = Status.Closed(conn.name, error?.message)
+            }
+        })
     }
 
     fun disconnect() {
@@ -176,8 +186,19 @@ class TerminalViewModel(private val container: AppContainer) : ViewModel() {
         val raw = scan.toString()
         val guided = _login.value != null
         val url = pickLoginUrl(extractLoginUrls(raw, anyUrl = guided))
-        val code = if (guided) findDeviceCode(stripTerminalCodes(raw)) else null
+        val plain = if (guided) stripTerminalCodes(raw) else ""
+        val code = if (guided) findDeviceCode(plain) else null
         updateDetected(url, code)
+        // A success message after the login link appeared: mark done and move on by itself.
+        val st = _login.value
+        if (st != null && !st.done && _detected.value.url != null && loginSucceeded(plain)) {
+            _login.value = st.copy(done = true)
+            autoNextJob?.cancel()
+            autoNextJob = viewModelScope.launch {
+                delay(3000)
+                if (_login.value?.let { it.done && it.index == st.index } == true) nextLoginStep()
+            }
+        }
     }
 
     /** Links found in the rendered terminal buffer (second source during a guided login). */
@@ -196,27 +217,44 @@ class TerminalViewModel(private val container: AppContainer) : ViewModel() {
     /** True the first time a login page should be opened (the screen opens it in the browser). */
     fun shouldOpen(url: String): Boolean = synchronized(openedUrls) { openedUrls.add(url) }
 
+    private var autoNextJob: Job? = null
+
     private fun startStep(index: Int) {
         val st = _login.value ?: return
         val step = st.steps[index]
+        val conn = currentConn ?: return
+        autoNextJob?.cancel()
         synchronized(lock) { scan.clear() }
         _detected.value = Detected()
-        _login.value = st.copy(index = index)
-        shell?.resize(ptyCols(), rows)
+        _login.value = st.copy(index = index, done = false)
         followUpJob?.cancel()
         followUpJob = viewModelScope.launch(Dispatchers.IO) {
-            val s = shell ?: return@launch
-            if (index > 0) {
-                // Leave the previous tool (Ctrl-C twice exits Claude Code / Gemini / Qwen).
-                runCatching { s.write("\u0003"); delay(400); s.write("\u0003"); delay(900) }
-            }
-            runCatching { s.write(step.command) }
-            step.followUp?.let { follow ->
-                // Wait until the tool's UI has settled before typing /login or /auth.
-                val started = System.currentTimeMillis()
-                delay(1500)
-                while (System.currentTimeMillis() - lastOutputAt < 2500 && System.currentTimeMillis() - started < 25_000) delay(300)
-                runCatching { s.write(follow) }
+            try {
+                if (index > 0) {
+                    // Fresh shell for every tool: nothing left over from the previous login.
+                    val old = shell
+                    shell = null
+                    generation++
+                    runCatching { old?.close() }
+                    local("\n\n── ${step.label} (${index + 1}/${st.steps.size}) ──\n")
+                    shell = openShellFor(conn)
+                } else {
+                    shell?.resize(ptyCols(), rows)
+                }
+                val s = shell ?: return@launch
+                delay(500) // let the shell print its prompt
+                s.write(step.command)
+                step.followUp?.let { follow ->
+                    // Wait until the tool's UI has settled before typing /login or /auth.
+                    val started = System.currentTimeMillis()
+                    delay(1500)
+                    while (System.currentTimeMillis() - lastOutputAt < 2500 && System.currentTimeMillis() - started < 25_000) delay(300)
+                    s.write(follow)
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                local("\nFehler beim Start von ${step.label}: ${e.message}\n")
             }
         }
     }
@@ -228,6 +266,7 @@ class TerminalViewModel(private val container: AppContainer) : ViewModel() {
 
     fun finishLogin() {
         followUpJob?.cancel()
+        autoNextJob?.cancel()
         _login.value = null
         shell?.resize(cols, rows)
         _messages.tryEmit("Anmeldung beendet. Claude Code und Gemini/Qwen mit /exit bzw. Ctrl-C zweimal verlassen.")

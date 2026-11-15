@@ -91,3 +91,14 @@ class LoginWrapTest {
         assertEquals(t.trimEnd('\n') + "\n", app.devdeck.core.claudecode.joinWrappedUrls(t).let { it.trimEnd('\n') + "\n" })
     }
 }
+
+class LoginSuccessTest {
+    @Test fun recognisesSuccessMessages() {
+        val ok = listOf("Login successful. Press Enter to continue…", "Successfully logged in", "✓ Authentication successful",
+            "Successfully authenticated with Qwen")
+        ok.forEach { kotlin.test.assertTrue(app.devdeck.core.claudecode.loginSucceeded(it), it) }
+        listOf("Select login method:", "Paste code here if prompted >", "Login with Google").forEach {
+            kotlin.test.assertFalse(app.devdeck.core.claudecode.loginSucceeded(it), it)
+        }
+    }
+}

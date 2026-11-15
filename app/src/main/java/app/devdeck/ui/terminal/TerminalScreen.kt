@@ -296,6 +296,7 @@ private fun LoginBanner(st: TerminalViewModel.LoginState, det: TerminalViewModel
             )
             Text(
                 when {
+                    st.done -> if (st.isLast) "✓ Angemeldet. Fertig in 3 s …" else "✓ Angemeldet. Weiter mit ${st.steps[st.index + 1].label} in 3 s …"
                     det.code != null -> "Anmeldeseite geöffnet. Dort diesen Code eingeben: ${det.code}"
                     det.url != null -> "Anmeldeseite geöffnet. Nach dem Anmelden den angezeigten Code kopieren und hier „Code einfügen“ tippen. " +
                         "Kommt kein Code, ist die Anmeldung schon fertig."

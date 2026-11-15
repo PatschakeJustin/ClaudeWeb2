@@ -121,3 +121,12 @@ fun extractLoginUrls(raw: String, anyUrl: Boolean): List<String> {
     // Prefer the longer variant when the visible text is a truncated copy of a hidden link.
     return (visible + hidden).filter { u -> (visible + hidden).none { o -> o != u && o.startsWith(u) } }.distinct()
 }
+
+private val SUCCESS = Regex(
+    "login successful|successfully (logged|signed) in|logged in successfully|signed in successfully|" +
+        "authentication (was )?successful|authentication complete|successfully authenticated",
+    RegexOption.IGNORE_CASE,
+)
+
+/** True if the (stripped) output says the login worked. */
+fun loginSucceeded(text: String): Boolean = SUCCESS.containsMatchIn(text)
