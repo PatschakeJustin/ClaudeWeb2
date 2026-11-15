@@ -3,9 +3,6 @@ package app.devdeck.data
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
-import android.os.Build
-import android.provider.Settings
-import androidx.core.content.FileProvider
 import app.devdeck.BuildConfig
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -20,7 +17,6 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import java.io.File
 
 @Serializable
 data class UpdateInfo(
@@ -35,12 +31,10 @@ sealed interface UpdateState {
     data object Checking : UpdateState
     data object UpToDate : UpdateState
     data class Available(val info: UpdateInfo) : UpdateState
-    data class Downloading(val info: UpdateInfo, val progress: Float) : UpdateState
-    data class NeedsPermission(val info: UpdateInfo, val file: File) : UpdateState
     data class Failed(val message: String) : UpdateState
 }
 
-/** Checks the GitHub release "latest" for a newer build, downloads it and hands it to the package installer. */
+/** Checks the GitHub release "latest" for a newer build and offers to download it. */
 class Updater(private val context: Context, private val http: OkHttpClient) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private val json = Json { ignoreUnknownKeys = true }
@@ -75,63 +69,15 @@ class Updater(private val context: Context, private val http: OkHttpClient) {
 
     fun dismiss() { job?.cancel(); _state.value = UpdateState.Idle }
 
-    fun download(info: UpdateInfo) {
-        job?.cancel()
-        job = scope.launch {
-            _state.value = UpdateState.Downloading(info, 0f)
-            try {
-                val file = withContext(Dispatchers.IO) {
-                    val dir = File(context.cacheDir, "updates").apply { mkdirs() }
-                    dir.listFiles()?.forEach { it.delete() }
-                    val target = File(dir, "Humantize-DevApp-${info.versionCode}.apk")
-                    http.newCall(Request.Builder().url(BASE + info.apk).build()).execute().use { r ->
-                        if (!r.isSuccessful) throw IllegalStateException("HTTP ${r.code}")
-                        val body = r.body!!
-                        val total = body.contentLength().takeIf { it > 0 }
-                        body.byteStream().use { input ->
-                            target.outputStream().use { out ->
-                                val buf = ByteArray(64 * 1024)
-                                var done = 0L
-                                while (true) {
-                                    val n = input.read(buf)
-                                    if (n < 0) break
-                                    out.write(buf, 0, n)
-                                    done += n
-                                    if (total != null) _state.value = UpdateState.Downloading(info, done.toFloat() / total)
-                                }
-                            }
-                        }
-                    }
-                    target
-                }
-                install(info, file)
-            } catch (e: kotlinx.coroutines.CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                _state.value = UpdateState.Failed("Download fehlgeschlagen: ${e.message}")
-            }
-        }
-    }
-
-    /** Opens the system installer; if the app may not install packages yet, asks for that first. */
-    fun install(info: UpdateInfo, file: File) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !context.packageManager.canRequestPackageInstalls()) {
-            _state.value = UpdateState.NeedsPermission(info, file)
-            return
-        }
-        val uri = FileProvider.getUriForFile(context, context.packageName + ".updates", file)
-        val intent = Intent(Intent.ACTION_VIEW)
-            .setDataAndType(uri, "application/vnd.android.package-archive")
-            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
-        context.startActivity(intent)
-        _state.value = UpdateState.Idle
-    }
-
-    fun openInstallPermissionSettings() {
+    /**
+     * Opens the APK download in the browser; Android's own installer takes over from there. The app
+     * deliberately does not download and install APKs itself (Play Protect treats that as malware behaviour).
+     */
+    fun openDownload(info: UpdateInfo) {
         context.startActivity(
-            Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:" + context.packageName))
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            Intent(Intent.ACTION_VIEW, Uri.parse(BASE + info.apk)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         )
+        _state.value = UpdateState.Idle
     }
 
     companion object {

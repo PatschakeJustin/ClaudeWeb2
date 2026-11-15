@@ -4,7 +4,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -36,35 +35,12 @@ fun UpdateDialog() {
                     Text("Version ${s.info.versionName} ist da (installiert: ${updater.installedVersion}).")
                     if (s.info.notes.isNotBlank()) Text("Neu: ${s.info.notes}", style = MaterialTheme.typography.bodySmall,
                         modifier = Modifier.padding(top = 8.dp))
-                    Text("Darf die App das Update jetzt herunterladen und installieren?", modifier = Modifier.padding(top = 8.dp))
+                    Text("Jetzt aktualisieren? Der Download startet im Browser; danach die Datei öffnen und „Installieren“ (bzw. „Aktualisieren“) tippen.",
+                        modifier = Modifier.padding(top = 8.dp))
                 }
             },
-            confirmButton = { TextButton(onClick = { updater.download(s.info) }) { Text("Aktualisieren") } },
+            confirmButton = { TextButton(onClick = { updater.openDownload(s.info) }) { Text("Aktualisieren") } },
             dismissButton = { TextButton(onClick = updater::dismiss) { Text("Später") } },
-        )
-        is UpdateState.Downloading -> AlertDialog(
-            onDismissRequest = {},
-            title = { Text("Update wird geladen …") },
-            text = {
-                Column {
-                    LinearProgressIndicator(progress = { s.progress }, modifier = Modifier.fillMaxWidth())
-                    Text("${(s.progress * 100).toInt()} %", modifier = Modifier.padding(top = 8.dp))
-                }
-            },
-            confirmButton = {},
-            dismissButton = { TextButton(onClick = updater::dismiss) { Text("Abbrechen") } },
-        )
-        is UpdateState.NeedsPermission -> AlertDialog(
-            onDismissRequest = updater::dismiss,
-            title = { Text("Installation erlauben") },
-            text = {
-                Text(
-                    "Android muss einmalig erlauben, dass Humantize DevApp Updates installiert. " +
-                        "Tippe auf „Einstellungen“, aktiviere „Aus dieser Quelle zulassen“, komm zurück und tippe auf „Installieren“."
-                )
-            },
-            confirmButton = { TextButton(onClick = { updater.install(s.info, s.file) }) { Text("Installieren") } },
-            dismissButton = { TextButton(onClick = updater::openInstallPermissionSettings) { Text("Einstellungen") } },
         )
         UpdateState.UpToDate -> AlertDialog(
             onDismissRequest = updater::dismiss,
