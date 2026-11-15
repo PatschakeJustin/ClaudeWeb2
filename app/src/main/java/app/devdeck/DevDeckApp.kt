@@ -3,7 +3,10 @@ package app.devdeck
 import android.app.Application
 import app.devdeck.core.agent.AgentToolbox
 import app.devdeck.core.agent.ClaudeAgent
+import app.devdeck.core.claudecode.ClaudeCodePermission
+import app.devdeck.core.claudecode.ClaudeCodeSession
 import app.devdeck.core.ssh.SshManager
+import kotlinx.coroutines.flow.MutableStateFlow
 import app.devdeck.data.ConnectionsRepository
 import app.devdeck.data.KnownHostsRepository
 import app.devdeck.data.SecureStore
@@ -27,6 +30,8 @@ class DevDeckApp : Application() {
     }
 }
 
+data class TerminalRequest(val connectionId: String, val input: String?)
+
 class AppContainer(app: Application) {
     private val secure = SecureStore(app)
     val connections = ConnectionsRepository(secure)
@@ -35,6 +40,22 @@ class AppContainer(app: Application) {
     val http = OkHttpClient()
     val ssh = SshManager(knownHosts)
     val toolbox = AgentToolbox({ connections.state.value }, ssh, http)
+
+    /** Lets other screens ask the terminal to connect to a server and type something (e.g. `claude`). */
+    val terminalRequests = MutableStateFlow<TerminalRequest?>(null)
+
+    fun newClaudeCodeSession() = ClaudeCodeSession(
+        ssh,
+        connection = {
+            val id = settings.state.value.ccConnectionId
+            connections.state.value.ssh.firstOrNull { it.id == id }
+        },
+        workDir = {
+            val s = settings.state.value
+            s.ccWorkDir.ifBlank { connections.state.value.ssh.firstOrNull { it.id == s.ccConnectionId }?.defaultDirectory.orEmpty() }
+        },
+        permission = { runCatching { ClaudeCodePermission.valueOf(settings.state.value.ccPermission) }.getOrDefault(ClaudeCodePermission.EDIT) },
+    )
 
     private var cachedKey: String? = null
     private var cachedClient: AnthropicClient? = null

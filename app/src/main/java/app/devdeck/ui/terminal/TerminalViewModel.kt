@@ -30,6 +30,18 @@ class TerminalViewModel(private val container: AppContainer) : ViewModel() {
     val ctrlArmed: StateFlow<Boolean> = _ctrlArmed.asStateFlow()
 
     private var shell: ShellSession? = null
+
+    init {
+        // Requests from other screens, e.g. "log in to Claude Code on this server".
+        viewModelScope.launch {
+            container.terminalRequests.collect { req ->
+                if (req != null) {
+                    container.terminalRequests.value = null
+                    container.connections.state.value.ssh.firstOrNull { it.id == req.connectionId }?.let { connect(it, req.input) }
+                }
+            }
+        }
+    }
     private var cols = 80
     private var rows = 24
 
@@ -58,7 +70,7 @@ class TerminalViewModel(private val container: AppContainer) : ViewModel() {
 
     private fun local(text: String) = output(text.replace("\n", "\r\n").toByteArray())
 
-    fun connect(conn: SshConnection) {
+    fun connect(conn: SshConnection, initialInput: String? = null) {
         disconnect()
         synchronized(lock) { buffer.reset() }
         sink?.invoke("\u001bc".toByteArray()) // reset the visible terminal
@@ -74,6 +86,7 @@ class TerminalViewModel(private val container: AppContainer) : ViewModel() {
                     }
                 })
                 _status.value = Status.Connected(conn.name)
+                if (initialInput != null) shell?.write(initialInput)
             } catch (e: Exception) {
                 local("Fehler: ${e.message ?: e.javaClass.simpleName}\n")
                 _status.value = Status.Closed(conn.name, e.message)

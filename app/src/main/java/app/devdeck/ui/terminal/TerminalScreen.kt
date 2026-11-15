@@ -1,6 +1,20 @@
 package app.devdeck.ui.terminal
 
 import android.annotation.SuppressLint
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.widget.Toast
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.filled.Link
+import androidx.compose.material3.AlertDialog
+import androidx.compose.ui.platform.LocalContext
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonPrimitive
 import android.os.Handler
 import android.os.Looper
 import android.util.Base64
@@ -60,6 +74,8 @@ fun TerminalScreen(navigate: (Dest) -> Unit) {
     var pickerOpen by remember { mutableStateOf(false) }
     var menuOpen by remember { mutableStateOf(false) }
     var webView by remember { mutableStateOf<WebView?>(null) }
+    var links by remember { mutableStateOf<List<String>?>(null) }
+    val context = LocalContext.current
 
     val title = when (val s = status) {
         TerminalViewModel.Status.Idle -> "Terminal"
@@ -93,6 +109,9 @@ fun TerminalScreen(navigate: (Dest) -> Unit) {
                 }
             },
             actions = {
+                IconButton(onClick = {
+                    webView?.evaluateJavascript("termLinks()") { raw -> links = decodeJsList(raw) }
+                }) { Icon(Icons.Filled.Link, "Links") }
                 IconButton(onClick = { vm.setFontSize(settings.terminalFontSize - 1) }) { Icon(Icons.Filled.TextDecrease, "Kleiner") }
                 IconButton(onClick = { vm.setFontSize(settings.terminalFontSize + 1) }) { Icon(Icons.Filled.TextIncrease, "Größer") }
                 if (connected) IconButton(onClick = vm::disconnect) { Icon(Icons.Filled.LinkOff, "Trennen") }
@@ -140,14 +159,75 @@ fun TerminalScreen(navigate: (Dest) -> Unit) {
             }
         }
 
-        ExtraKeys(ctrl = ctrl, onCtrl = vm::toggleCtrl, onKey = { vm.send(it) }, onFocus = {
-            webView?.evaluateJavascript("termFocus()", null)
-        })
+        ExtraKeys(
+            ctrl = ctrl, onCtrl = vm::toggleCtrl, onKey = { vm.send(it) },
+            onFocus = { webView?.evaluateJavascript("termFocus()", null) },
+            onPaste = { clipboardText(context)?.let { vm.send(it) } },
+            onCopy = {
+                webView?.evaluateJavascript("termSelection()") { raw ->
+                    val text = decodeJsString(raw)
+                    if (text.isNotEmpty()) { copyText(context, text); Toast.makeText(context, "Kopiert", Toast.LENGTH_SHORT).show() }
+                    else Toast.makeText(context, "Erst Text im Terminal markieren (lange drücken)", Toast.LENGTH_SHORT).show()
+                }
+            },
+        )
+    }
+
+    links?.let { list ->
+        AlertDialog(
+            onDismissRequest = { links = null },
+            title = { Text("Links im Terminal") },
+            text = {
+                if (list.isEmpty()) Text("Keine Links gefunden.")
+                else Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    list.forEach { u ->
+                        Column {
+                            Text(u, fontFamily = MonoFamily, style = MaterialTheme.typography.bodySmall, maxLines = 4)
+                            Row {
+                                TextButton(onClick = { openLink(context, u); links = null }) { Text("Öffnen") }
+                                TextButton(onClick = { copyText(context, u); Toast.makeText(context, "Kopiert", Toast.LENGTH_SHORT).show() }) { Text("Kopieren") }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { links = null }) { Text("Schließen") } },
+        )
     }
 }
 
+private fun openLink(context: Context, url: String) {
+    if (!url.startsWith("https://") && !url.startsWith("http://")) return
+    try {
+        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+    } catch (_: Exception) {
+        copyText(context, url)
+        Handler(Looper.getMainLooper()).post { Toast.makeText(context, "Kein Browser gefunden – Link kopiert", Toast.LENGTH_SHORT).show() }
+    }
+}
+
+private fun copyText(context: Context, text: String) {
+    val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+    cm.setPrimaryClip(ClipData.newPlainText("DevDeck", text))
+}
+
+private fun clipboardText(context: Context): String? {
+    val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+    return cm.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(context)?.toString()?.takeIf { it.isNotEmpty() }
+}
+
+/** evaluateJavascript returns the JS value JSON-encoded; a returned string is therefore a JSON string literal. */
+private fun decodeJsString(raw: String?): String =
+    runCatching { Json.parseToJsonElement(raw ?: "null").jsonPrimitive.contentOrNull }.getOrNull().orEmpty()
+
+private fun decodeJsList(raw: String?): List<String> =
+    runCatching { Json.parseToJsonElement(decodeJsString(raw)).jsonArray.map { it.jsonPrimitive.content } }.getOrDefault(emptyList())
+
 @Composable
-private fun ExtraKeys(ctrl: Boolean, onCtrl: () -> Unit, onKey: (String) -> Unit, onFocus: () -> Unit) {
+private fun ExtraKeys(
+    ctrl: Boolean, onCtrl: () -> Unit, onKey: (String) -> Unit, onFocus: () -> Unit,
+    onPaste: () -> Unit, onCopy: () -> Unit,
+) {
     val keys = listOf(
         "Esc" to "\u001b", "Tab" to "\t", "↑" to "\u001b[A", "↓" to "\u001b[B", "←" to "\u001b[D", "→" to "\u001b[C",
         "^C" to "\u0003", "^D" to "\u0004", "^R" to "\u0012", "|" to "|", "/" to "/", "~" to "~", "-" to "-",
@@ -160,6 +240,8 @@ private fun ExtraKeys(ctrl: Boolean, onCtrl: () -> Unit, onKey: (String) -> Unit
             verticalAlignment = Alignment.CenterVertically,
         ) {
             FilterChip(selected = ctrl, onClick = onCtrl, label = { Text("Ctrl", fontFamily = MonoFamily) })
+            TextButton(onClick = { onPaste(); onFocus() }) { Text("Einfügen") }
+            TextButton(onClick = onCopy) { Text("Kopieren") }
             keys.forEach { (label, seq) ->
                 TextButton(onClick = { onKey(seq); onFocus() }) { Text(label, fontFamily = MonoFamily) }
             }
@@ -193,6 +275,7 @@ private fun TerminalWebView(
                 addJavascriptInterface(object {
                     @JavascriptInterface fun onInput(d: String) = onInput(d)
                     @JavascriptInterface fun onResize(c: Int, r: Int) = onResize(c, r)
+                    @JavascriptInterface fun openUrl(u: String) = openLink(ctx, u)
                     @JavascriptInterface fun onReady(c: Int, r: Int) {
                         onResize(c, r)
                         main.post {

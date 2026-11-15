@@ -5,6 +5,10 @@ import app.devdeck.core.fs.RemoteEntry
 import app.devdeck.core.fs.RemoteFs
 import app.devdeck.core.model.SshConnection
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import net.schmizz.sshj.connection.channel.direct.Signal
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -117,6 +121,50 @@ class SshManager(
                 exitCode = cmd.exitStatus,
                 timedOut = timedOut,
             )
+        }
+    }
+
+    /**
+     * Runs a command and delivers stdout/stderr line by line while it runs. Optional [stdin] is written
+     * and then closed. Cancelling the coroutine sends SIGINT and closes the channel. Returns the exit code.
+     */
+    suspend fun execStreaming(
+        conn: SshConnection,
+        command: String,
+        stdin: String? = null,
+        onStdout: (String) -> Unit,
+        onStderr: (String) -> Unit = {},
+    ): Int? = withContext(Dispatchers.IO) {
+        val c = client(conn)
+        val session = c.startSession()
+        val cmd = session.exec(command)
+        val job = currentCoroutineContext()[Job]
+        val handle = job?.invokeOnCompletion { cause ->
+            if (cause != null) {
+                runCatching { cmd.signal(Signal.INT) }
+                runCatching { cmd.close() }
+                runCatching { session.close() }
+            }
+        }
+        try {
+            if (stdin != null) {
+                cmd.outputStream.write(stdin.toByteArray(Charsets.UTF_8))
+                cmd.outputStream.flush()
+            }
+            runCatching { cmd.outputStream.close() }
+            val errThread = Thread {
+                runCatching { cmd.errorStream.bufferedReader(Charsets.UTF_8).forEachLine(onStderr) }
+            }.apply { isDaemon = true; start() }
+            cmd.inputStream.bufferedReader(Charsets.UTF_8).forEachLine { line ->
+                onStdout(line)
+            }
+            errThread.join(5_000)
+            runCatching { cmd.join(10, TimeUnit.SECONDS) }
+            currentCoroutineContext().ensureActive()
+            cmd.exitStatus
+        } finally {
+            handle?.dispose()
+            runCatching { session.close() }
         }
     }
 

@@ -57,6 +57,14 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.devdeck.core.claudecode.ClaudeCodePermission
+import app.devdeck.core.model.ConnectionStore
+import app.devdeck.data.AppSettings
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import app.devdeck.ui.Dest
 import app.devdeck.ui.LocalWideLayout
 import app.devdeck.ui.common.MarkdownText
@@ -85,8 +93,10 @@ fun AgentScreen(navigate: (Dest) -> Unit) {
             title = {
                 Column {
                     Text("Claude")
+                    val ccServer = connections.ssh.firstOrNull { it.id == settings.ccConnectionId }?.name
                     Text(
-                        settings.model + " · " + settings.effort,
+                        if (settings.agentMode == AppSettings.MODE_CLAUDE_CODE) "Claude Code (Abo) · ${ccServer ?: "kein Server"}"
+                        else "API · " + settings.model + " · " + settings.effort,
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -97,10 +107,12 @@ fun AgentScreen(navigate: (Dest) -> Unit) {
             },
         )
 
+        ModeBar(vm, settings, connections, navigate)
+
         Box(Modifier.weight(1f).fillMaxWidth()) {
             if (items.isEmpty()) {
                 EmptyState(
-                    hasKey = settings.apiKey.isNotBlank(),
+                    hasKey = settings.agentMode == AppSettings.MODE_CLAUDE_CODE || settings.apiKey.isNotBlank(),
                     connectionNames = connections.ssh.map { it.name } + connections.nextcloud.map { it.name },
                     onSetup = navigate,
                     onPrompt = { input = it },
@@ -179,6 +191,75 @@ fun AgentScreen(navigate: (Dest) -> Unit) {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ModeBar(vm: AgentViewModel, settings: AppSettings, connections: ConnectionStore, navigate: (Dest) -> Unit) {
+    val cc = settings.agentMode == AppSettings.MODE_CLAUDE_CODE
+    var serverMenu by remember { mutableStateOf(false) }
+    var permMenu by remember { mutableStateOf(false) }
+    var dirDialog by remember { mutableStateOf(false) }
+    val server = connections.ssh.firstOrNull { it.id == settings.ccConnectionId }
+    val perm = runCatching { ClaudeCodePermission.valueOf(settings.ccPermission) }.getOrDefault(ClaudeCodePermission.EDIT)
+
+    Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
+        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+            SegmentedButton(selected = cc, onClick = { vm.setMode(AppSettings.MODE_CLAUDE_CODE) },
+                shape = SegmentedButtonDefaults.itemShape(0, 2)) { Text("Abo (Claude Code)") }
+            SegmentedButton(selected = !cc, onClick = { vm.setMode(AppSettings.MODE_API) },
+                shape = SegmentedButtonDefaults.itemShape(1, 2)) { Text("API-Key") }
+        }
+        if (cc) {
+            Row(
+                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(top = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Box {
+                    AssistChip(onClick = { serverMenu = true }, label = { Text("Server: " + (server?.name ?: "wählen")) })
+                    DropdownMenu(serverMenu, onDismissRequest = { serverMenu = false }) {
+                        connections.ssh.forEach { c ->
+                            DropdownMenuItem(text = { Text(c.name) }, onClick = { serverMenu = false; vm.setClaudeCodeServer(c.id) })
+                        }
+                        DropdownMenuItem(text = { Text("Server einrichten …") }, onClick = { serverMenu = false; navigate(Dest.CONNECTIONS) })
+                    }
+                }
+                AssistChip(
+                    onClick = { dirDialog = true },
+                    label = { Text("Ordner: " + settings.ccWorkDir.ifBlank { server?.defaultDirectory ?: "~" }, maxLines = 1) },
+                )
+                Box {
+                    AssistChip(onClick = { permMenu = true }, label = { Text(perm.label) })
+                    DropdownMenu(permMenu, onDismissRequest = { permMenu = false }) {
+                        ClaudeCodePermission.entries.forEach { p ->
+                            DropdownMenuItem(
+                                text = { Column { Text(p.label); Text(p.description, style = MaterialTheme.typography.bodySmall) } },
+                                onClick = { permMenu = false; vm.setClaudeCodePermission(p) },
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if (dirDialog) {
+        var dir by remember { mutableStateOf(settings.ccWorkDir) }
+        AlertDialog(
+            onDismissRequest = { dirDialog = false },
+            title = { Text("Arbeitsordner") },
+            text = {
+                Column {
+                    Text("In diesem Ordner auf dem Server arbeitet Claude Code (z. B. dein Projekt). Leer = Startverzeichnis der Verbindung.",
+                        style = MaterialTheme.typography.bodySmall)
+                    OutlinedTextField(dir, { dir = it }, singleLine = true, placeholder = { Text("/root/projekt") },
+                        modifier = Modifier.padding(top = 8.dp))
+                }
+            },
+            confirmButton = { TextButton(onClick = { vm.setClaudeCodeWorkDir(dir); dirDialog = false }) { Text("Übernehmen") } },
+            dismissButton = { TextButton(onClick = { dirDialog = false }) { Text("Abbrechen") } },
+        )
+    }
+}
+
 @Composable
 private fun ChatRow(item: ChatItem) {
     when (item) {
@@ -242,6 +323,14 @@ private fun ToolCard(item: ChatItem.ToolCall) {
 }
 
 private fun toolLabel(name: String) = when (name) {
+    "Bash" -> "Befehl"
+    "Read" -> "Datei lesen"
+    "Write" -> "Datei schreiben"
+    "Edit", "MultiEdit" -> "Datei bearbeiten"
+    "Glob", "Grep", "LS" -> "Suche"
+    "WebFetch", "WebSearch" -> "Web"
+    "TodoWrite" -> "Aufgabenliste"
+    "Task", "Agent" -> "Teilaufgabe
     "run_command" -> "Befehl"
     "read_file" -> "Datei lesen"
     "write_file" -> "Datei schreiben"

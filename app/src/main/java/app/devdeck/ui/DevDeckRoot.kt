@@ -112,7 +112,7 @@ private fun Content(dest: Dest, navigate: (Dest) -> Unit) {
         Dest.AGENT -> AgentScreen(navigate)
         Dest.TERMINAL -> TerminalScreen(navigate)
         Dest.FILES -> FilesScreen(navigate)
-        Dest.CONNECTIONS -> ConnectionsScreen()
+        Dest.CONNECTIONS -> ConnectionsScreen(navigate)
         Dest.SETTINGS -> SettingsScreen()
     }
 }

@@ -13,10 +13,12 @@
 <div id="term"></div>
 <script src="xterm.js"></script>
 <script src="addon-fit.js"></script>
+<script src="addon-web-links.js"></script>
 <script>
   const TermClass = (window.Terminal && window.Terminal.Terminal) || window.Terminal;
   const FitClass = (window.FitAddon && window.FitAddon.FitAddon) || window.FitAddon;
-  const bridge = window.Bridge || { onInput() {}, onResize() {}, onReady() {} };
+  const LinksClass = (window.WebLinksAddon && window.WebLinksAddon.WebLinksAddon) || window.WebLinksAddon;
+  const bridge = window.Bridge || { onInput() {}, onResize() {}, onReady() {}, openUrl() {} };
 
   const term = new TermClass({
     fontFamily: 'monospace',
@@ -27,6 +29,7 @@
   });
   const fit = new FitClass();
   term.loadAddon(fit);
+  term.loadAddon(new LinksClass((event, uri) => bridge.openUrl(uri)));
   term.open(document.getElementById('term'));
 
   let lastCols = 0, lastRows = 0;
@@ -51,6 +54,28 @@
   window.termFocus = () => term.focus();
   window.termSetFontSize = size => { term.options.fontSize = size; doFit(); };
   window.termSize = () => term.cols + 'x' + term.rows;
+  window.termSelection = () => term.getSelection();
+
+  // All URLs in the scrollback; soft-wrapped lines are joined first so long login links stay whole.
+  window.termLinks = () => {
+    const buf = term.buffer.active;
+    const logical = [];
+    for (let i = 0; i < buf.length; i++) {
+      const line = buf.getLine(i);
+      if (!line) continue;
+      const text = line.translateToString(true);
+      if (line.isWrapped && logical.length) logical[logical.length - 1] += text;
+      else logical.push(text);
+    }
+    const found = [];
+    for (const l of logical) {
+      for (const m of l.matchAll(/https?:\/\/[^\s"'<>]+/g)) {
+        const u = m[0].replace(/[).,;:]+$/, '');
+        if (!found.includes(u)) found.push(u);
+      }
+    }
+    return JSON.stringify(found.reverse());
+  };
 
   doFit();
   bridge.onReady(term.cols, term.rows);

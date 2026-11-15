@@ -67,21 +67,40 @@ import app.devdeck.core.model.RdpConnection
 import app.devdeck.core.model.SshConnection
 import app.devdeck.core.nextcloud.WebDavFs
 import app.devdeck.ui.appContainer
+import app.devdeck.ui.Dest
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import app.devdeck.ui.theme.MonoFamily
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ConnectionsScreen() {
+fun ConnectionsScreen(navigate: (Dest) -> Unit) {
     val container = appContainer()
     val store by container.connections.state.collectAsState()
     var editing by remember { mutableStateOf<Connection?>(null) }
     var addMenu by remember { mutableStateOf(false) }
+    var setup by remember { mutableStateOf<SshConnection?>(null) }
+    var setupOpen by remember { mutableStateOf(false) }
     val context = LocalContext.current
 
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
             TopAppBar(title = { Text("Verbindungen") })
+            Card(
+                Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+            ) {
+                Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Server einrichten", style = MaterialTheme.typography.titleMedium)
+                        Text("Claude Code auf einem Server installieren und mit deinem Claude-Abo anmelden.",
+                            style = MaterialTheme.typography.bodySmall)
+                    }
+                    Button(onClick = { setup = null; setupOpen = true }) { Text("Start") }
+                }
+            }
             if (store.all.isEmpty()) {
                 Text(
                     "Lege SSH-Server, Nextcloud-Instanzen und Remote-Desktop-Verbindungen an. " +
@@ -116,8 +135,12 @@ fun ConnectionsScreen() {
     }
 
     editing?.let { c ->
-        EditDialog(container, c, isNew = store.all.none { it.id == c.id }, onDismiss = { editing = null })
+        EditDialog(
+            container, c, isNew = store.all.none { it.id == c.id }, onDismiss = { editing = null },
+            onInstallClaude = { ssh -> editing = null; setup = ssh; setupOpen = true },
+        )
     }
+    if (setupOpen) ServerSetupDialog(container, setup, navigate) { setupOpen = false }
 }
 
 private fun <T> androidx.compose.foundation.lazy.LazyListScope.section(title: String, list: List<T>, row: @Composable (T) -> Unit) {
@@ -166,7 +189,10 @@ fun launchRdp(context: Context, c: RdpConnection) {
 }
 
 @Composable
-private fun EditDialog(container: AppContainer, initial: Connection, isNew: Boolean, onDismiss: () -> Unit) {
+private fun EditDialog(
+    container: AppContainer, initial: Connection, isNew: Boolean, onDismiss: () -> Unit,
+    onInstallClaude: (SshConnection) -> Unit,
+) {
     var draft by remember { mutableStateOf(initial) }
     var testResult by remember { mutableStateOf<String?>(null) }
     var testing by remember { mutableStateOf(false) }
@@ -219,6 +245,9 @@ private fun EditDialog(container: AppContainer, initial: Connection, isNew: Bool
                 }
 
                 val d = draft
+                if (d is SshConnection && valid(d)) {
+                    TextButton(onClick = { container.connections.save(d); onInstallClaude(d) }) { Text("Claude Code auf diesem Server installieren …") }
+                }
                 if (d is SshConnection && !isNew) {
                     TextButton(onClick = {
                         container.knownHosts.forget("${d.host}:${d.port}")
@@ -295,7 +324,7 @@ private fun Field(value: String, label: String, password: Boolean = false, numbe
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun SshFields(c: SshConnection, update: (SshConnection) -> Unit) {
+internal fun SshFields(c: SshConnection, update: (SshConnection) -> Unit) {
     var useKey by remember { mutableStateOf(!c.privateKey.isNullOrBlank()) }
     Field(c.name, "Name (z. B. webserver)") { update(c.copy(name = it)) }
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

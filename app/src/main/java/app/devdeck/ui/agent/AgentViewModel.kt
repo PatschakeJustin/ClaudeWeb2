@@ -6,6 +6,9 @@ import app.devdeck.AppContainer
 import app.devdeck.core.agent.AgentEvent
 import app.devdeck.core.agent.ClaudeAgent
 import app.devdeck.core.agent.ToolApprover
+import app.devdeck.core.claudecode.ClaudeCodePermission
+import app.devdeck.core.claudecode.ClaudeCodeSession
+import app.devdeck.data.AppSettings
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -55,6 +58,7 @@ class AgentViewModel(private val container: AppContainer) : ViewModel() {
     val connections = container.connections.state
 
     private var agent: ClaudeAgent? = null
+    private var ccSession: ClaudeCodeSession? = null
     private var job: Job? = null
     private var approveAllInChat = false
     private val ids = AtomicLong()
@@ -64,16 +68,30 @@ class AgentViewModel(private val container: AppContainer) : ViewModel() {
     fun send(text: String) {
         val trimmed = text.trim()
         if (trimmed.isEmpty() || _running.value) return
-        val a = agent ?: container.newAgent().also { agent = it }
-        if (a == null) {
-            append(ChatItem.Notice(nextKey(), "Kein API-Key gesetzt. Bitte unter Einstellungen den Anthropic-API-Key eintragen.", true))
+        val st = container.settings.state.value
+        if (st.agentMode == AppSettings.MODE_CLAUDE_CODE) {
+            if (container.connections.state.value.ssh.none { it.id == st.ccConnectionId }) {
+                append(ChatItem.Notice(nextKey(), "Bitte oben einen Server wählen, auf dem Claude Code eingerichtet ist (Verbindungen → „Server einrichten“).", true))
+                return
+            }
+            val session = ccSession ?: container.newClaudeCodeSession().also { ccSession = it }
+            launchTurn(trimmed) { session.send(trimmed) { e -> onEvent(e) } }
             return
         }
-        append(ChatItem.User(nextKey(), trimmed))
+        val a = agent ?: container.newAgent().also { agent = it }
+        if (a == null) {
+            append(ChatItem.Notice(nextKey(), "Kein API-Key gesetzt. Bitte unter Einstellungen den Anthropic-API-Key eintragen – oder oben auf „Abo“ wechseln.", true))
+            return
+        }
+        launchTurn(trimmed) { a.send(trimmed, approver) { onEvent(it) } }
+    }
+
+    private fun launchTurn(text: String, block: suspend () -> Unit) {
+        append(ChatItem.User(nextKey(), text))
         _running.value = true
         job = viewModelScope.launch {
             try {
-                a.send(trimmed, approver) { onEvent(it) }
+                block()
             } finally {
                 _running.value = false
                 _approval.value?.answer?.complete(false)
@@ -81,6 +99,24 @@ class AgentViewModel(private val container: AppContainer) : ViewModel() {
             }
         }
     }
+
+    fun setMode(mode: String) {
+        if (mode == container.settings.state.value.agentMode) return
+        container.settings.update { it.copy(agentMode = mode) }
+        newChat()
+    }
+
+    fun setClaudeCodeServer(id: String) {
+        container.settings.update { it.copy(ccConnectionId = id, ccWorkDir = "") }
+        newChat()
+    }
+
+    fun setClaudeCodeWorkDir(dir: String) {
+        container.settings.update { it.copy(ccWorkDir = dir.trim()) }
+        newChat()
+    }
+
+    fun setClaudeCodePermission(p: ClaudeCodePermission) = container.settings.update { it.copy(ccPermission = p.name) }
 
     fun stop() {
         job?.cancel()
@@ -90,6 +126,7 @@ class AgentViewModel(private val container: AppContainer) : ViewModel() {
     fun newChat() {
         job?.cancel()
         agent = null // fresh conversation (and picks up a changed API key)
+        ccSession = null
         approveAllInChat = false
         _items.value = emptyList()
     }

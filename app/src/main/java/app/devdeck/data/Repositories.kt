@@ -38,7 +38,17 @@ data class AppSettings(
     val autoApprove: Boolean = false,
     val refusalFallback: Boolean = true,
     val terminalFontSize: Int = 13,
+    /** "claude_code" = Claude Code on a server with the user's subscription, "api" = API key. */
+    val agentMode: String = MODE_CLAUDE_CODE,
+    val ccConnectionId: String? = null,
+    val ccWorkDir: String = "",
+    val ccPermission: String = "EDIT",
 ) {
+    companion object {
+        const val MODE_CLAUDE_CODE = "claude_code"
+        const val MODE_API = "api"
+    }
+
     fun agentSettings() = AgentSettings(model = model, effort = effort, refusalFallback = refusalFallback)
 }
 
