@@ -79,12 +79,17 @@ class AgentViewModel(private val container: AppContainer) : ViewModel() {
         _running.value = true
         job = viewModelScope.launch {
             try {
-                val ok = runBackend(st.agentMode, trimmed)
+                var ok = runBackend(st.agentMode, trimmed)
                 val reserve = st.reserveMode
                 if (!ok && reserve.isNotEmpty() && reserve != st.agentMode) {
                     append(ChatItem.Notice(nextKey(), "Wechsle zur Reserve: ${backendLabel(reserve, container.connections.state.value)} …", false))
-                    runBackend(reserve, trimmed)
+                    ok = runBackend(reserve, trimmed)
                 }
+                // Via the hub's Discord bot (only if logged in and a notification channel is set up).
+                container.hub.notify(
+                    (if (ok) "KI-Aufgabe erledigt: " else "KI-Aufgabe fehlgeschlagen: ") + trimmed.take(120),
+                    if (ok) "success" else "error",
+                )
             } finally {
                 _running.value = false
                 _approval.value?.answer?.complete(false)

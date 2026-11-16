@@ -1,0 +1,11 @@
+{
+  "name": "humantize-hub",
+  "version": "1.0.0",
+  "description": "Login, end-to-end encrypted sync, widget store and Discord bot for Humantize DevApp Mobile",
+  "main": "server.js",
+  "private": true,
+  "license": "MIT",
+  "engines": { "node": ">=20" },
+  "scripts": { "start": "node server.js", "test": "node --test test/*.test.js" },
+  "optionalDependencies": { "discord.js": "^14.16.3" }
+}

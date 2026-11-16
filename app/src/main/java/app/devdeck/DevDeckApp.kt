@@ -18,6 +18,7 @@ import app.devdeck.data.SecureStore
 import app.devdeck.data.SettingsRepository
 import app.devdeck.data.Updater
 import app.devdeck.data.ServerBackup
+import app.devdeck.data.HubSync
 import app.devdeck.ui.terminal.TerminalViewModel
 import com.anthropic.client.AnthropicClient
 import com.anthropic.client.okhttp.AnthropicOkHttpClient
@@ -78,6 +79,7 @@ class AppContainer(private val app: Application) {
     val http = OkHttpClient()
     val updater = Updater(app, http)
     val backup = ServerBackup(app, connections, settings)
+    val hub = HubSync(secure, connections, settings, http)
     val ssh = SshManager(knownHosts)
     val toolbox = AgentToolbox({ connections.state.value }, ssh, http)
 

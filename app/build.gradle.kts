@@ -80,6 +80,14 @@ kotlin {
     }
 }
 
+// The Humantize Hub (hub/*.js) ships inside the app so the server wizard can install it.
+val copyHub by tasks.registering(Copy::class) {
+    from(rootProject.file("hub")) { include("server.js", "bot.js", "package.json") }
+    into(layout.buildDirectory.dir("generated/hubassets/hub"))
+}
+android.sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("generated/hubassets").get().asFile)
+tasks.named("preBuild") { dependsOn(copyHub) }
+
 dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs_nio:2.1.5")
     implementation(project(":core"))

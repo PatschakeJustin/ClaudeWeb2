@@ -73,7 +73,8 @@ fun extraInstallScript(agents: Collection<CliAgent>): String {
     return sb.toString()
 }
 
-private val NODE_INSTALL = """
+/** Installs Node.js 22 to ~/.local/node if no Node >= 20 is present. */
+val NODE_INSTALL = """
 if ! command -v node >/dev/null 2>&1 || [ "${'$'}(node -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo 0)" -lt 20 ]; then
   echo "== Node.js installieren (nach ~/.local/node) =="
   case "${'$'}(uname -m)" in x86_64) NARCH=x64;; aarch64|arm64) NARCH=arm64;; armv7l) NARCH=armv7l;; *) NARCH=x64;; esac

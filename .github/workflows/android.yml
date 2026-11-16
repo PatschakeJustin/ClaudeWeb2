@@ -23,7 +23,10 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
-      - name: Core tests (SSH, Nextcloud, Claude agent)
+      - name: Hub tests (Node)
+        run: cd hub && node --test test/*.test.js
+
+      - name: Core tests (SSH, Nextcloud, Claude agent, Hub)
         run: ./gradlew :core:test
 
       - name: Build APK

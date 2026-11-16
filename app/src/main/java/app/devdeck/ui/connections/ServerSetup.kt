@@ -82,6 +82,15 @@ fun ServerSetupDialog(container: AppContainer, initial: SshConnection?, navigate
     var aiOn by remember { mutableStateOf(false) }
     var aiModel by remember { mutableStateOf(SUGGESTED_MODELS.first().first) }
     var aiResult by remember { mutableStateOf<String?>(null) }
+    var hubOn by remember { mutableStateOf(false) }
+    var hubPort by remember { mutableStateOf("8443") }
+    var discordOn by remember { mutableStateOf(false) }
+    var dToken by remember { mutableStateOf("") }
+    var dUsers by remember { mutableStateOf("") }
+    var dChannel by remember { mutableStateOf("") }
+    var dServices by remember { mutableStateOf("") }
+    var hubResult by remember { mutableStateOf<String?>(null) }
+    val appContext = androidx.compose.ui.platform.LocalContext.current.applicationContext
     val extras = remember { mutableStateListOf(CliAgent.GEMINI) }
     val installedTools = remember { mutableStateListOf<CliAgent>() }
     val scope = rememberCoroutineScope()
@@ -102,6 +111,10 @@ fun ServerSetupDialog(container: AppContainer, initial: SshConnection?, navigate
         val withClaude = installClaude && !win
         val extrasNow = if (win) emptyList() else extras.toList()
         val withAi = aiOn
+        val withHub = hubOn
+        val withDiscord = hubOn && discordOn && dToken.isNotBlank()
+        val hubPortNum = hubPort.toIntOrNull()?.coerceIn(1, 65535) ?: 8443
+        hubResult = null
         val model = aiModel.trim()
         job = scope.launch {
             try {
@@ -153,6 +166,26 @@ fun ServerSetupDialog(container: AppContainer, initial: SshConnection?, navigate
                         log += "✓ Selfhosted KI bereit: $model"
                     } else {
                         log += "Selfhosted KI: Installation fehlgeschlagen (Exit-Code ${exit ?: "?"})."
+                        ok = false
+                    }
+                }
+                if (ok && withHub && !win) {
+                    log += "== Humantize Hub installieren =="
+                    try {
+                        val files = listOf("server.js", "bot.js", "package.json")
+                            .associateWith { appContext.assets.open("hub/$it").use { s -> s.readBytes() } }
+                        val discord = if (withDiscord) app.devdeck.core.hub.DiscordConfig(
+                            token = dToken, allowedUsers = dUsers.split(',', ' ', ';').filter { it.isNotBlank() },
+                            channelId = dChannel, services = dServices.split(',', ' ', ';').filter { it.isNotBlank() },
+                        ) else null
+                        val r = app.devdeck.core.hub.HubInstaller(container.ssh)
+                            .install(c, files, port = hubPortNum, discord = discord) { line -> scope.launch { log += line } }
+                        container.hub.rememberHub(r.url, r.fingerprint)
+                        hubResult = r.url
+                        log += "✓ Hub läuft: ${r.url}"
+                        log += "  Fingerabdruck: ${r.fingerprint}"
+                    } catch (e: Exception) {
+                        log += "Hub: ${e.message}"
                         ok = false
                     }
                 }
@@ -231,6 +264,29 @@ fun ServerSetupDialog(container: AppContainer, initial: SshConnection?, navigate
                                 Text("Weitere Modelle: ollama.com/library", style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
+                            if (!conn.windows) {
+                                ToolCheck("Humantize Hub (Login & Sync)",
+                                    "Konto-Login, verschlüsselter Sync aller Server/Einstellungen/Widgets, Widget-Store", hubOn) { hubOn = it }
+                                if (hubOn) {
+                                    OutlinedTextField(hubPort, { hubPort = it.filter(Char::isDigit) }, label = { Text("Port") }, singleLine = true)
+                                    Text("Der Port muss von außen erreichbar sein (ggf. in der Firewall deines Hosters freigeben).",
+                                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    ToolCheck("Discord-Bot", "Status als Präsenz, Befehle /status, /claude, /dienst und Meldungen aus der App", discordOn) { discordOn = it }
+                                    if (discordOn) {
+                                        Text(
+                                            "1. discord.com/developers → New Application → Bot → Token kopieren.\n" +
+                                                "2. OAuth2 → URL Generator: „bot“ + „applications.commands“ → Bot in deinen Server einladen.\n" +
+                                                "3. In Discord Entwicklermodus an → Rechtsklick auf dich → „ID kopieren“.",
+                                            style = MaterialTheme.typography.bodySmall,
+                                        )
+                                        OutlinedTextField(dToken, { dToken = it.trim() }, label = { Text("Bot-Token") }, singleLine = true,
+                                            visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
+                                        OutlinedTextField(dUsers, { dUsers = it }, label = { Text("Erlaubte Discord-Nutzer-IDs (mit Komma)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                                        OutlinedTextField(dChannel, { dChannel = it.trim() }, label = { Text("Kanal-ID für Meldungen (optional)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                                        OutlinedTextField(dServices, { dServices = it }, label = { Text("Steuerbare Dienste, z. B. nginx, docker (optional)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                                    }
+                                }
+                            }
                             Text(
                                 "Tipp: Claude Code läuft als der hier eingetragene Benutzer. Für Arbeiten mit vollen Rechten " +
                                     "ist ein normaler Benutzer mit sudo sicherer als root.",
@@ -239,7 +295,7 @@ fun ServerSetupDialog(container: AppContainer, initial: SshConnection?, navigate
                         }
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                             TextButton(onClick = onDismiss) { Text("Abbrechen") }
-                            Button(onClick = ::start, enabled = ((!conn.windows && (installClaude || extras.isNotEmpty())) || (aiOn && aiModel.isNotBlank())) && conn.host.isNotBlank() && conn.username.isNotBlank() &&
+                            Button(onClick = ::start, enabled = ((!conn.windows && (installClaude || extras.isNotEmpty() || hubOn)) || (aiOn && aiModel.isNotBlank())) && conn.host.isNotBlank() && conn.username.isNotBlank() &&
                                 (!conn.password.isNullOrEmpty() || !conn.privateKey.isNullOrBlank())) { Text("Installieren") }
                         }
                     }
@@ -268,6 +324,12 @@ fun ServerSetupDialog(container: AppContainer, initial: SshConnection?, navigate
                                 Button(onClick = ::start) { Text("Erneut versuchen") }
                             }
                             else -> {
+                                hubResult?.let {
+                                    Text("✓ Humantize Hub läuft auf $it. Lege jetzt unter Einstellungen → Konto & Sync dein Konto an " +
+                                        "(der erste Nutzer wird Admin, danach ist die Registrierung geschlossen).",
+                                        color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodyMedium)
+                                    TextButton(onClick = { onDismiss(); navigate(Dest.SETTINGS) }) { Text("Konto erstellen") }
+                                }
                                 aiResult?.let {
                                     Text("✓ Selfhosted KI „$it“ läuft auf ${conn.name} – im Chat unter „Modell“ oder „Reserve“ wählbar (Verbindung über SSH-Tunnel).",
                                         color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodyMedium)

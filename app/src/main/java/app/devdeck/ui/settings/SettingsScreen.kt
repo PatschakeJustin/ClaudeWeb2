@@ -55,6 +55,8 @@ fun SettingsScreen() {
             Modifier.verticalScroll(rememberScrollState()).padding(16.dp).widthIn(max = 640.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            AccountSection()
+
             Text("Claude-API", style = MaterialTheme.typography.titleMedium)
             OutlinedTextField(
                 value = s.apiKey,
