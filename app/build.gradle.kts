@@ -105,6 +105,8 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.9.2")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
     implementation("org.bouncycastle:bcprov-jdk18on:1.81")
+    implementation("androidx.glance:glance-appwidget:1.1.1")
+    implementation("androidx.work:work-runtime-ktx:2.10.0")
 }
 
 // Jackson 2.15+ checks `instanceof java.lang.BootstrapMethodError` while starting up; that class only exists

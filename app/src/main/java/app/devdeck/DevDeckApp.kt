@@ -19,6 +19,8 @@ import app.devdeck.data.SettingsRepository
 import app.devdeck.data.Updater
 import app.devdeck.data.ServerBackup
 import app.devdeck.data.HubSync
+import app.devdeck.data.WidgetRepository
+import app.devdeck.data.WidgetRunner
 import app.devdeck.ui.terminal.TerminalViewModel
 import com.anthropic.client.AnthropicClient
 import com.anthropic.client.okhttp.AnthropicOkHttpClient
@@ -72,6 +74,8 @@ data class TerminalRequest(
 )
 
 class AppContainer(private val app: Application) {
+    val appContext: android.content.Context get() = app
+
     private val secure = SecureStore(app)
     val connections = ConnectionsRepository(secure)
     val settings = SettingsRepository(secure)
@@ -79,9 +83,20 @@ class AppContainer(private val app: Application) {
     val http = OkHttpClient()
     val updater = Updater(app, http)
     val backup = ServerBackup(app, connections, settings)
-    val hub = HubSync(secure, connections, settings, http)
     val ssh = SshManager(knownHosts)
     val toolbox = AgentToolbox({ connections.state.value }, ssh, http)
+
+    // Declared after ssh/http/connections/settings: property initialisers run top to bottom.
+    val widgets = WidgetRepository(secure)
+    val widgetRunner = WidgetRunner(ssh, { connections.state.value }, widgets)
+    val hub = HubSync(secure, connections, settings, http, widgetsJson = { widgets.toJsonArray() }, applyWidgets = { widgets.applyJsonArray(it) },
+        changes = widgets.widgets)
+
+    /** Prompt handed to the chat by a "KI-Schnellfrage" widget. */
+    val pendingPrompt = MutableStateFlow<String?>(null)
+
+    /** Lets other components switch the visible screen (e.g. a home widget opening the chat). */
+    val navRequest = MutableStateFlow<app.devdeck.ui.Dest?>(null)
 
     val aiClient = OpenAiCompatClient(http, ssh) { id -> connections.state.value.ssh.firstOrNull { it.id == id } }
 

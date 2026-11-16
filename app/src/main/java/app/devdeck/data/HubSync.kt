@@ -55,6 +55,8 @@ class HubSync(
     private val http: OkHttpClient,
     private val widgetsJson: () -> JsonArray = { JsonArray(emptyList()) },
     private val applyWidgets: (JsonArray) -> Unit = {},
+    /** Further changes that should trigger a sync (e.g. the widget list). */
+    private val changes: kotlinx.coroutines.flow.Flow<Any?> = kotlinx.coroutines.flow.flowOf(Unit),
 ) {
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -74,7 +76,7 @@ class HubSync(
     init {
         @OptIn(FlowPreview::class)
         scope.launch {
-            combine(connections.state, settings.state) { _, _ -> }.drop(1).debounce(2000).collect {
+            combine(connections.state, settings.state, changes) { _, _, _ -> }.drop(1).debounce(2000).collect {
                 if (_account.value != null) runCatching { sync() }
             }
         }
@@ -120,7 +122,8 @@ class HubSync(
             repeat(2) { attempt ->
                 val cur = _account.value ?: return
                 val remote = client(cur).pullVault(cur.token, keys(cur))
-                if (remote.plaintext != null && remote.version != cur.version) applyRemote(remote.plaintext)
+                val remoteText = remote.plaintext
+                if (remoteText != null && remote.version != cur.version) applyRemote(remoteText)
                 save(cur.copy(version = remote.version))
                 val local = localPayload()
                 if (local == lastSynced && remote.plaintext != null) { done(); return }

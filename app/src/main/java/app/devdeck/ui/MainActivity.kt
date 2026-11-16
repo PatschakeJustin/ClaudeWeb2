@@ -19,9 +19,24 @@ class MainActivity : ComponentActivity() {
         }
         // Status/navigation bar icons follow the light/dark system theme.
         enableEdgeToEdge()
+        handleWidgetIntent(intent)
+        runCatching { app.devdeck.widget.HomeWidgets.schedule(this) }
         setContent {
             DevDeckTheme { DevDeckRoot() }
         }
+    }
+
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        handleWidgetIntent(intent)
+    }
+
+    /** A "KI-Schnellfrage" home widget opens the chat with its prompt. */
+    private fun handleWidgetIntent(intent: android.content.Intent?) {
+        val prompt = intent?.getStringExtra(app.devdeck.widget.HomeWidgets.EXTRA_PROMPT) ?: return
+        val c = (application as DevDeckApp).container
+        c.pendingPrompt.value = prompt
+        c.navRequest.value = Dest.AGENT
     }
 
     private fun showCrashReport(file: java.io.File) {

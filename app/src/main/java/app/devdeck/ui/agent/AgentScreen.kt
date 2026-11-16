@@ -85,6 +85,10 @@ fun AgentScreen(navigate: (Dest) -> Unit) {
     val settings by vm.settings.collectAsState()
     val connections by vm.connections.collectAsState()
     var input by rememberSaveable { mutableStateOf("") }
+    // Prompt handed over by a "KI-Schnellfrage" widget.
+    val container = app.devdeck.ui.appContainer()
+    val pending by container.pendingPrompt.collectAsState()
+    LaunchedEffect(pending) { pending?.let { input = it; container.pendingPrompt.value = null } }
     val listState = rememberLazyListState()
     val wide = LocalWideLayout.current
 

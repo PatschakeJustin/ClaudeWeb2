@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Dns
+import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SmartToy
@@ -38,6 +39,8 @@ import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -59,6 +62,7 @@ import app.devdeck.ui.settings.SettingsScreen
 import app.devdeck.ui.terminal.TerminalScreen
 
 enum class Dest(val label: String, val icon: ImageVector) {
+    HOME("Start", Icons.Filled.Dashboard),
     AGENT("KI-Chat", Icons.Filled.SmartToy),
     TERMINAL("Terminal", Icons.Filled.Terminal),
     FILES("Dateien", Icons.Filled.Folder),
@@ -75,7 +79,10 @@ fun appContainer(): AppContainer = (LocalContext.current.applicationContext as D
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun DevDeckRoot() {
-    var dest by rememberSaveable { mutableStateOf(Dest.AGENT) }
+    var dest by rememberSaveable { mutableStateOf(Dest.HOME) }
+    val container = appContainer()
+    val navRequest by container.navRequest.collectAsState()
+    LaunchedEffect(navRequest) { navRequest?.let { dest = it; container.navRequest.value = null } }
     UpdateDialog()
     BoxWithConstraints(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         val wide = maxWidth >= 600.dp
@@ -137,6 +144,7 @@ fun DevDeckRoot() {
 private fun Content(dest: Dest, navigate: (Dest) -> Unit) {
     Column(Modifier.fillMaxSize()) {
         when (dest) {
+            Dest.HOME -> app.devdeck.ui.home.HomeScreen(navigate)
             Dest.AGENT -> AgentScreen(navigate)
             Dest.TERMINAL -> TerminalScreen(navigate)
             Dest.FILES -> FilesScreen(navigate)

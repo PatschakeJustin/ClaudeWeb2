@@ -2,4 +2,5 @@
 <resources>
     <string name="app_name">Humantize DevApp Mobile</string>
     <string name="app_short_name">Humantize</string>
+    <string name="widget_description">Server-Status, Befehlsausgaben und Schnellaktionen von Humantize</string>
 </resources>
