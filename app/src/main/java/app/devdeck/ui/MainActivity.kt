@@ -4,7 +4,6 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.activity.SystemBarStyle
 import app.devdeck.ui.theme.DevDeckTheme
 import app.devdeck.DevDeckApp
 
@@ -18,12 +17,8 @@ class MainActivity : ComponentActivity() {
             showCrashReport(crash)
             return
         }
-        // Black console look: light status/navigation bar icons regardless of the system theme.
-        enableEdgeToEdge(
-            statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
-            navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.BLACK),
-        )
-        window.decorView.setBackgroundColor(android.graphics.Color.BLACK)
+        // Status/navigation bar icons follow the light/dark system theme.
+        enableEdgeToEdge()
         setContent {
             DevDeckTheme { DevDeckRoot() }
         }

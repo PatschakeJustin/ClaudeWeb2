@@ -40,7 +40,7 @@ PY
 }
 
 i=2
-for name in term dateien server system chat; do
+for name in terminal dateien server einstellungen ki-chat; do
   tap_text "$name"
   sleep 4
   shot "$i-$name"
