@@ -77,6 +77,47 @@
     return JSON.stringify(found.reverse());
   };
 
+  // ---- Touch scrolling --------------------------------------------------------------------------
+  // Swipe = scroll. In the normal buffer xterm's own scrollback is used; when the program on the server
+  // tracks the mouse (tmux with "mouse on", vim, less …) the swipe is sent as mouse-wheel events instead,
+  // so tmux scrolls through its own history.
+  const termEl = document.getElementById('term');
+  let lastY = null, acc = 0, moved = false;
+  function lineHeight() {
+    const row = termEl.querySelector('.xterm-rows > div');
+    const h = row ? row.getBoundingClientRect().height : 0;
+    return h > 4 ? h : (term.options.fontSize || 13) * 1.2;
+  }
+  function wheel(lines) {
+    const n = Math.min(Math.abs(lines), 15);
+    const button = lines < 0 ? 64 : 65;           // 64 = wheel up, 65 = wheel down (SGR encoding)
+    const col = Math.max(1, Math.floor(term.cols / 2)), row = Math.max(1, Math.floor(term.rows / 2));
+    for (let i = 0; i < n; i++) bridge.onInput('\x1b[<' + button + ';' + col + ';' + row + 'M');
+  }
+  window.termScroll = lines => {
+    const tracking = term.modes && term.modes.mouseTrackingMode && term.modes.mouseTrackingMode !== 'none';
+    if (tracking) wheel(lines);
+    else if (term.buffer.active.type === 'alternate') {
+      const key = lines < 0 ? '\x1b[A' : '\x1b[B';  // no scrollback in full-screen apps: send arrow keys
+      for (let i = 0; i < Math.min(Math.abs(lines), 15); i++) bridge.onInput(key);
+    } else term.scrollLines(lines);
+  };
+  termEl.addEventListener('touchstart', e => {
+    if (e.touches.length === 1) { lastY = e.touches[0].clientY; acc = 0; moved = false; }
+  }, { passive: true, capture: true });
+  termEl.addEventListener('touchmove', e => {
+    if (lastY === null || e.touches.length !== 1) return;
+    const y = e.touches[0].clientY;
+    acc += lastY - y; lastY = y;
+    const lh = lineHeight();
+    const lines = Math.trunc(acc / lh);
+    if (lines !== 0) { acc -= lines * lh; moved = true; window.termScroll(lines); }
+    if (moved) { e.preventDefault(); e.stopPropagation(); }
+  }, { passive: false, capture: true });
+  termEl.addEventListener('touchend', () => { lastY = null; }, { capture: true });
+
+  window.termScrollToBottom = () => term.scrollToBottom();
+
   doFit();
   bridge.onReady(term.cols, term.rows);
   term.focus();

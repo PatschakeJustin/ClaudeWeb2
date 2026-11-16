@@ -135,7 +135,11 @@ class TerminalViewModel(private val container: AppContainer, private val appCont
                 // Plain sessions run inside tmux on the server: if the connection drops, reconnecting
                 // brings back exactly the same session (including a running Claude Code).
                 if (logins.isEmpty() && !conn.windows && container.settings.state.value.terminalTmux) {
-                    shell?.write("command -v tmux >/dev/null 2>&1 && exec tmux new -A -s humantize\r")
+                    // "mouse on" lets swipe gestures (sent as wheel events) scroll through tmux's history.
+                    shell?.write(
+                        "command -v tmux >/dev/null 2>&1 && exec tmux new -A -s humantize \\; " +
+                            "set -g mouse on \\; set -g history-limit 20000\r"
+                    )
                     if (initialInput != null) delay(800)
                 }
                 if (initialInput != null) shell?.write(initialInput)
