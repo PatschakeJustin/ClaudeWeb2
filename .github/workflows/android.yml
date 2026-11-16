@@ -102,11 +102,13 @@ jobs:
           sudo udevadm trigger --name-match=kvm
 
       - name: Run app in emulator
+        timeout-minutes: 25
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: ${{ matrix.api }}
-          arch: x86_64
-          target: ${{ matrix.api == 24 && 'default' || 'google_apis' }}
+          arch: ${{ matrix.api == 24 && 'x86' || 'x86_64' }}
+          target: google_apis
+          emulator-boot-timeout: 900
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           script: bash scripts/smoke-test.sh ${{ matrix.api }}

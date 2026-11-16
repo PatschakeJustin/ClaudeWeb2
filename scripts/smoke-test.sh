@@ -6,21 +6,26 @@ OUT=smoke
 mkdir -p "$OUT"
 PKG=app.devdeck
 
-adb wait-for-device
-adb shell 'while [ "$(getprop sys.boot_completed)" != "1" ]; do sleep 2; done'
-adb install -r Humantize-DevApp.apk || { echo "INSTALL FAILED"; exit 1; }
-adb logcat -c
+T() { timeout "$@"; }   # every adb call gets a time limit so a hang cannot block the job
 
-shot() { adb exec-out screencap -p > "$OUT/api$API-$1.png"; }
+T 300 adb wait-for-device
+T 600 adb shell 'while [ "$(getprop sys.boot_completed)" != "1" ]; do sleep 2; done' || echo "boot not confirmed"
+echo "Android $(adb shell getprop ro.build.version.release) / API $(adb shell getprop ro.build.version.sdk)"
+T 300 adb install -r Humantize-DevApp.apk || { echo "INSTALL FAILED"; exit 1; }
+# Allow notifications up front (Android 13+), otherwise the permission dialog covers the app in screenshots.
+T 30 adb shell pm grant app.devdeck android.permission.POST_NOTIFICATIONS 2>/dev/null || true
+T 30 adb logcat -c
 
-adb shell am start -W -n $PKG/.ui.MainActivity
+shot() { T 60 adb exec-out screencap -p > "$OUT/api$API-$1.png"; }
+
+T 120 adb shell am start -W -n $PKG/.ui.MainActivity
 sleep 12
 shot 1-start
 
 # Tap the navigation blocks by their text (found via the accessibility tree), not by guessed coordinates.
 tap_text() {
-  adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1
-  adb pull /sdcard/ui.xml "$OUT/ui.xml" >/dev/null 2>&1
+  T 60 adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1
+  T 30 adb pull /sdcard/ui.xml "$OUT/ui.xml" >/dev/null 2>&1
   XY=$(python3 - "$OUT/ui.xml" "$1" <<'PY'
 import re, sys, xml.etree.ElementTree as ET
 want = sys.argv[2].lower()
@@ -31,7 +36,7 @@ for n in ET.parse(sys.argv[1]).iter("node"):
         break
 PY
 )
-  if [ -n "$XY" ]; then adb shell input tap $XY; else echo "not found: $1"; fi
+  if [ -n "$XY" ]; then T 30 adb shell input tap $XY; else echo "not found: $1"; fi
 }
 
 i=2
@@ -42,7 +47,7 @@ for name in term dateien server system chat; do
   i=$((i + 1))
 done
 
-adb logcat -d > "$OUT/logcat-api$API.txt"
+T 60 adb logcat -d > "$OUT/logcat-api$API.txt"
 echo "=== Process / crash check (API $API) ==="
 if grep -q "FATAL EXCEPTION" "$OUT/logcat-api$API.txt"; then
   echo "CRASH on API $API:"
