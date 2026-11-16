@@ -14,7 +14,7 @@ android {
 
     defaultConfig {
         applicationId = "app.devdeck"
-        minSdk = 26
+        minSdk = 24 // Android 7.0
         targetSdk = 36
         versionCode = 100 + buildNumber
         versionName = "0.5.$buildNumber"
@@ -44,6 +44,8 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+        // Back-ports java.time, java.nio.file etc. used by the SSH and Claude libraries to Android 7.x.
+        isCoreLibraryDesugaringEnabled = true
     }
 
     buildFeatures {
@@ -79,6 +81,7 @@ kotlin {
 }
 
 dependencies {
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs_nio:2.1.5")
     implementation(project(":core"))
 
     val composeBom = platform("androidx.compose:compose-bom:2025.09.00")

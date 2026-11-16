@@ -19,6 +19,7 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.put
 import okhttp3.HttpUrl.Companion.toHttpUrl
+import okio.ByteString.Companion.toByteString
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -225,7 +226,8 @@ Write-Output 'DEVDECK_AI_OK'
 
 /** The SSH command that runs [script] in PowerShell (base64 UTF-16LE, avoids all quoting issues). */
 fun powershellCommand(script: String): String {
-    val b64 = java.util.Base64.getEncoder().encodeToString(script.toByteArray(Charsets.UTF_16LE))
+    // okio instead of java.util.Base64, which Android only has from 8.0 on.
+    val b64 = script.toByteArray(Charsets.UTF_16LE).toByteString().base64()
     return "powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand $b64"
 }
 
