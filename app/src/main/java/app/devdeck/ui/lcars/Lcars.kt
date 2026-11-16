@@ -84,18 +84,20 @@ fun SegmentBar(height: Dp, modifier: Modifier = Modifier, label: String? = null,
 fun LcarsBlock(
     label: String, color: Color, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier,
     shape: RoundedCornerShape = RoundedCornerShape(0.dp), align: Alignment = Alignment.BottomEnd,
+    fontSize: Int = 14,
 ) {
     Box(
         modifier
             .clip(shape)
             .background(if (selected) Color.White else color)
             .clickable(onClick = onClick)
-            .padding(horizontal = 10.dp, vertical = 6.dp),
+            .padding(horizontal = if (fontSize < 14) 4.dp else 10.dp, vertical = 6.dp),
         contentAlignment = align,
     ) {
         Text(
             label.uppercase(), color = Color.Black, fontFamily = Condensed, fontWeight = FontWeight.Medium,
-            fontSize = 14.sp, letterSpacing = 1.sp, maxLines = 1, overflow = TextOverflow.Clip, textAlign = TextAlign.End,
+            fontSize = fontSize.sp, letterSpacing = if (fontSize < 14) 0.5.sp else 1.sp, maxLines = 1,
+            overflow = TextOverflow.Clip, textAlign = TextAlign.End,
         )
     }
 }

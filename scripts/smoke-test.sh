@@ -17,18 +17,28 @@ adb shell am start -W -n $PKG/.ui.MainActivity
 sleep 12
 shot 1-start
 
-SIZE=$(adb shell wm size | grep -o '[0-9]*x[0-9]*' | tail -1)
-W=${SIZE%x*}; H=${SIZE#*x}
-DENSITY=$(adb shell wm density | grep -o '[0-9]*' | tail -1)
-# Phone layout: row of 5 navigation blocks just above the system navigation bar.
-NAVBAR=$(( 48 * DENSITY / 160 ))
-ROW=$(( H - NAVBAR - 23 * DENSITY / 160 ))
-i=0
-for name in chat terminal dateien server system; do
-  X=$(( (2 * i + 1) * W / 10 ))
-  adb shell input tap "$X" "$ROW"
+# Tap the navigation blocks by their text (found via the accessibility tree), not by guessed coordinates.
+tap_text() {
+  adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1
+  adb pull /sdcard/ui.xml "$OUT/ui.xml" >/dev/null 2>&1
+  XY=$(python3 - "$OUT/ui.xml" "$1" <<'PY'
+import re, sys, xml.etree.ElementTree as ET
+want = sys.argv[2].lower()
+for n in ET.parse(sys.argv[1]).iter("node"):
+    if (n.get("text") or "").strip().lower() == want:
+        x1, y1, x2, y2 = map(int, re.findall(r"\d+", n.get("bounds")))
+        print((x1 + x2) // 2, (y1 + y2) // 2)
+        break
+PY
+)
+  if [ -n "$XY" ]; then adb shell input tap $XY; else echo "not found: $1"; fi
+}
+
+i=2
+for name in term dateien server system chat; do
+  tap_text "$name"
   sleep 4
-  shot "$((i + 2))-$name"
+  shot "$i-$name"
   i=$((i + 1))
 done
 

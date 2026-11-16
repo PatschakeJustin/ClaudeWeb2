@@ -12,6 +12,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -44,12 +47,12 @@ import app.devdeck.ui.settings.SettingsScreen
 import app.devdeck.ui.terminal.TerminalScreen
 import app.devdeck.ui.theme.Lcars
 
-enum class Dest(val label: String, val icon: ImageVector) {
-    AGENT("KI-Chat", Icons.Filled.SmartToy),
-    TERMINAL("Terminal", Icons.Filled.Terminal),
-    FILES("Dateien", Icons.Filled.Folder),
-    CONNECTIONS("Server", Icons.Filled.Dns),
-    SETTINGS("System", Icons.Filled.Settings),
+enum class Dest(val label: String, val short: String, val icon: ImageVector) {
+    AGENT("KI-Chat", "Chat", Icons.Filled.SmartToy),
+    TERMINAL("Terminal", "Term", Icons.Filled.Terminal),
+    FILES("Dateien", "Dateien", Icons.Filled.Folder),
+    CONNECTIONS("Server", "Server", Icons.Filled.Dns),
+    SETTINGS("System", "System", Icons.Filled.Settings),
 }
 
 /** True on tablets / unfolded foldables / landscape phones wide enough for two panes. */
@@ -100,27 +103,33 @@ private fun WideFrame(dest: Dest, navigate: (Dest) -> Unit) {
 }
 
 /** Phone: elbow header with the screen name, content, and a row of navigation blocks at the bottom. */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun PhoneFrame(dest: Dest, navigate: (Dest) -> Unit) {
+    val imeVisible = WindowInsets.isImeVisible
     Column(Modifier.fillMaxSize()) {
-        Row(Modifier.fillMaxWidth().height(40.dp)) {
-            Elbow(colorFor(dest), columnWidth = 44.dp, barHeight = 14.dp, outerRadius = 22.dp, innerRadius = 10.dp,
-                modifier = Modifier.width(70.dp).fillMaxHeight())
-            SegmentBar(14.dp, Modifier.weight(1f).padding(start = 4.dp), label = dest.label,
+        Row(Modifier.fillMaxWidth().height(32.dp)) {
+            Elbow(colorFor(dest), columnWidth = 14.dp, barHeight = 12.dp, outerRadius = 16.dp, innerRadius = 8.dp,
+                modifier = Modifier.width(40.dp).fillMaxHeight())
+            SegmentBar(12.dp, Modifier.weight(1f).padding(start = 4.dp), label = dest.label,
                 colors = listOf(colorFor(dest), Lcars.Peach, Lcars.Lavender))
         }
         Row(Modifier.weight(1f).fillMaxWidth()) {
-            Box(Modifier.width(44.dp).fillMaxHeight().padding(bottom = 4.dp).background(colorFor(dest)))
-            Box(Modifier.weight(1f).fillMaxHeight().padding(start = 8.dp)) { Content(dest, navigate) }
+            Box(Modifier.width(14.dp).fillMaxHeight().padding(bottom = 4.dp).background(colorFor(dest)))
+            Box(Modifier.weight(1f).fillMaxHeight().padding(start = 6.dp)) { Content(dest, navigate) }
         }
-        Row(Modifier.fillMaxWidth().height(46.dp).padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-            Dest.entries.forEachIndexed { i, d ->
-                val shape = when (i) {
-                    0 -> RoundedCornerShape(topStartPercent = 50, bottomStartPercent = 50)
-                    Dest.entries.lastIndex -> RoundedCornerShape(topEndPercent = 50, bottomEndPercent = 50)
-                    else -> RoundedCornerShape(0.dp)
+        // While typing the keyboard needs the space; the navigation comes back when it closes.
+        if (!imeVisible) {
+            Row(Modifier.fillMaxWidth().height(44.dp).padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                Dest.entries.forEachIndexed { i, d ->
+                    val shape = when (i) {
+                        0 -> RoundedCornerShape(topStartPercent = 50, bottomStartPercent = 50)
+                        Dest.entries.lastIndex -> RoundedCornerShape(topEndPercent = 50, bottomEndPercent = 50)
+                        else -> RoundedCornerShape(0.dp)
+                    }
+                    LcarsBlock(d.short, colorFor(d), dest == d, { navigate(d) }, Modifier.weight(1f).fillMaxHeight(),
+                        shape, Alignment.Center, fontSize = 12)
                 }
-                LcarsBlock(d.label, colorFor(d), dest == d, { navigate(d) }, Modifier.weight(1f).fillMaxHeight(), shape, Alignment.Center)
             }
         }
     }
