@@ -98,3 +98,15 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
     implementation("org.bouncycastle:bcprov-jdk18on:1.81")
 }
+
+// Jackson 2.15+ checks `instanceof java.lang.BootstrapMethodError` while starting up; that class only exists
+// from Android 8.0 on, so the app crashed immediately on Android 7. 2.14.3 is the newest version without that
+// check and is supported by the Anthropic SDK (minimum 2.13.4).
+configurations.all {
+    resolutionStrategy.eachDependency {
+        if (requested.group.startsWith("com.fasterxml.jackson")) {
+            useVersion("2.14.3")
+            because("Android 7 compatibility (no java.lang.BootstrapMethodError)")
+        }
+    }
+}
