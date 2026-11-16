@@ -76,3 +76,48 @@ jobs:
         with:
           name: test-reports
           path: core/build/reports/tests/
+
+  # Starts the app in Android emulators (7.0, 11, 14), opens every tab and fails on crashes.
+  # Screenshots and logcat are attached to the "latest" release (smoke-*.png / smoke-*.txt).
+  smoke:
+    needs: build
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        api: [24, 30, 34]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: Humantize-DevApp-apk
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Run app in emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ matrix.api }}
+          arch: x86_64
+          target: ${{ matrix.api == 24 && 'default' || 'google_apis' }}
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          script: bash scripts/smoke-test.sh ${{ matrix.api }}
+
+      - name: Attach screenshots and logcat to the release
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ls -la smoke || exit 0
+          cd smoke
+          for f in *; do mv "$f" "smoke-$f"; done
+          gh release upload latest smoke-* --clobber -R "$GITHUB_REPOSITORY" || true
+

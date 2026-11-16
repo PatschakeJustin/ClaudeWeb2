@@ -26,29 +26,36 @@ import org.bouncycastle.jce.provider.BouncyCastleProvider
 import java.security.Security
 
 class DevDeckApp : Application() {
-    lateinit var container: AppContainer
-        private set
+    /** Created on first use (not in onCreate), so a failure here can still be recorded and shown. */
+    val container: AppContainer by lazy { AppContainer(this) }
 
     override fun onCreate() {
         super.onCreate()
-        // Android ships a stripped-down "BC" provider; sshj needs the full BouncyCastle.
-        Security.removeProvider(BouncyCastleProvider.PROVIDER_NAME)
-        Security.insertProviderAt(BouncyCastleProvider(), 1)
+        // First of all, so that every later crash – also during startup – ends up in the crash report.
         installCrashRecorder()
-        container = AppContainer(this)
+        // Android ships a stripped-down "BC" provider; sshj needs the full BouncyCastle.
+        runCatching {
+            Security.removeProvider(BouncyCastleProvider.PROVIDER_NAME)
+            Security.insertProviderAt(BouncyCastleProvider(), 1)
+        }.onFailure { recordCrash(Thread.currentThread(), it) }
+    }
+
+    fun recordCrash(thread: Thread, error: Throwable) {
+        runCatching {
+            java.io.File(filesDir, CRASH_FILE).writeText(
+                "Humantize DevApp ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE}), " +
+                    "Android ${android.os.Build.VERSION.RELEASE} (API ${android.os.Build.VERSION.SDK_INT}), " +
+                    "${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}\n" +
+                    "Thread: ${thread.name}\n\n" + error.stackTraceToString()
+            )
+        }
     }
 
     /** Writes the stack trace of a crash to a file; the app shows it on the next start so it can be sent in. */
     private fun installCrashRecorder() {
         val previous = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, error ->
-            runCatching {
-                java.io.File(filesDir, CRASH_FILE).writeText(
-                    "Humantize DevApp ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE}), " +
-                        "Android ${android.os.Build.VERSION.RELEASE}, ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}\n" +
-                        "Thread: ${thread.name}\n\n" + error.stackTraceToString()
-                )
-            }
+            recordCrash(thread, error)
             previous?.uncaughtException(thread, error)
         }
     }

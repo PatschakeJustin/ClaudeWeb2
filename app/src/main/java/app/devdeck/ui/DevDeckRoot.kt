@@ -64,7 +64,6 @@ private fun colorFor(d: Dest) = Lcars.Cycle[d.ordinal % Lcars.Cycle.size]
 fun DevDeckRoot() {
     var dest by rememberSaveable { mutableStateOf(Dest.AGENT) }
     UpdateDialog()
-    CrashDialog()
     BoxWithConstraints(Modifier.fillMaxSize().background(Lcars.Black)) {
         val wide = maxWidth >= 600.dp
         CompositionLocalProvider(LocalWideLayout provides wide) {
