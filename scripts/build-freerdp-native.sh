@@ -48,6 +48,8 @@ for a in $ARCHS; do
   cp -r "$WORK/out/$a" "$DST/$a"
   # Keep only what the JNI build and the APK need: shared libraries and headers.
   find "$DST/$a" -name '*.a' -delete
+  # Remove debug symbols (cuts the libraries to a fraction of their size).
+  find "$DST/$a" -maxdepth 1 -name '*.so' -exec "$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip" --strip-unneeded {} \;
   ls -la "$DST/$a"/*.so
 done
 echo "FreeRDP $FREERDP_TAG für $ARCHS gebaut."

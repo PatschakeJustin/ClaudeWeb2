@@ -54,6 +54,8 @@ android {
     }
 
     packaging {
+        // Compressed native libraries (RDP): much smaller download; Android unpacks them on install.
+        jniLibs { useLegacyPackaging = true }
         resources {
             excludes += setOf(
                 "META-INF/DEPENDENCIES",

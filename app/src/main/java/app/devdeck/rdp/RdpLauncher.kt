@@ -7,13 +7,19 @@ import com.freerdp.freerdpcore.application.GlobalApp
 import com.freerdp.freerdpcore.domain.BookmarkBase
 import com.freerdp.freerdpcore.domain.ManualBookmark
 import com.freerdp.freerdpcore.presentation.SessionActivity
-import java.io.File
 
 /** Built-in RDP client (FreeRDP). Opens the remote desktop inside the app – no extra app needed. */
 object RdpLauncher {
-    /** True when the native RDP libraries are part of this APK for this device's CPU. */
-    fun available(context: Context): Boolean =
-        File(context.applicationInfo.nativeLibraryDir, "libfreerdp-android.so").exists()
+    private var loaded: Boolean? = null
+
+    /**
+     * True when the native RDP libraries are part of this APK for this device's CPU. Checked by loading them:
+     * modern Android can run libraries directly from the APK, so they are not always unpacked as files.
+     */
+    @Synchronized
+    fun available(@Suppress("UNUSED_PARAMETER") context: Context): Boolean = loaded ?: runCatching {
+        System.loadLibrary("freerdp-android"); true
+    }.getOrElse { false }.also { loaded = it }
 
     fun open(context: Context, c: RdpConnection, passwordOverride: String? = null) {
         GlobalApp.init(context)
