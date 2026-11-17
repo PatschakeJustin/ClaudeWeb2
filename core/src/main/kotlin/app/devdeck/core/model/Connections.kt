@@ -40,6 +40,12 @@ data class RdpConnection(
     val port: Int = 3389,
     val username: String = "",
     val domain: String = "",
+    /** Optional; empty = asked when connecting. Stored encrypted like all connections. */
+    val password: String = "",
+    /** Scale the remote desktop to the screen instead of using the device resolution. */
+    val fitScreen: Boolean = false,
+    /** Connect to the console session (/admin). */
+    val console: Boolean = false,
 ) : Connection {
     override val kind get() = Connection.Kind.RDP
 }

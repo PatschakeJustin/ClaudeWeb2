@@ -10,11 +10,35 @@ permissions:
   contents: write
 
 jobs:
+  # Native RDP libraries (FreeRDP + OpenSSL for ARM). Built once and cached until the script changes.
+  freerdp-native:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - id: cache
+        uses: actions/cache@v4
+        with:
+          path: freerdp/src/main/jniLibs
+          key: freerdp-native-${{ hashFiles('scripts/build-freerdp-native.sh') }}
+      - name: Build FreeRDP for Android
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: bash scripts/build-freerdp-native.sh
+      - run: find freerdp/src/main/jniLibs -name '*.so' | xargs ls -la
+
   build:
+    needs: freerdp-native
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+
+      - name: Restore native RDP libraries
+        uses: actions/cache/restore@v4
+        with:
+          path: freerdp/src/main/jniLibs
+          key: freerdp-native-${{ hashFiles('scripts/build-freerdp-native.sh') }}
+          fail-on-cache-miss: true
 
       - uses: actions/setup-java@v4
         with:

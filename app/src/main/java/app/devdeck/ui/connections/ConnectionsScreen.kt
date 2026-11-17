@@ -43,6 +43,7 @@ import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.Switch
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
@@ -179,7 +180,7 @@ fun ConnectionsScreen(navigate: (Dest) -> Unit) {
             if (store.all.isEmpty()) {
                 Text(
                     "Lege SSH-Server, Nextcloud-Instanzen und Remote-Desktop-Verbindungen an. " +
-                        "Claude kann auf SSH und Nextcloud zugreifen; RDP öffnest du in einer Remote-Desktop-App.",
+                        "Claude kann auf SSH und Nextcloud zugreifen; RDP öffnet den Windows-Desktop direkt in der App.",
                     modifier = Modifier.padding(24.dp),
                     style = MaterialTheme.typography.bodyMedium,
                 )
@@ -297,7 +298,11 @@ private fun ConnectionRow(
 }
 
 fun launchRdp(context: Context, c: RdpConnection) {
-    // Microsoft "Windows App" / Remote Desktop and several other clients understand rdp:// URIs.
+    if (app.devdeck.rdp.RdpLauncher.available(context)) {
+        try { app.devdeck.rdp.RdpLauncher.open(context, c); return }
+        catch (e: Throwable) { Toast.makeText(context, "Eingebautes RDP fehlgeschlagen: ${e.message}", Toast.LENGTH_LONG).show() }
+    }
+    // Fallback (e.g. device CPU without built-in RDP): Microsoft "Windows App" / Remote Desktop and several other clients understand rdp:// URIs.
     val parts = mutableListOf("full%20address=s:${c.host}:${c.port}")
     if (c.username.isNotBlank()) {
         val user = if (c.domain.isNotBlank()) "${c.domain}\\${c.username}" else c.username
@@ -342,7 +347,7 @@ private fun EditDialog(
                         val n = WebDavFs(d, container.http).list("/").size
                         "✓ Verbunden, $n Einträge im Hauptordner"
                     }
-                    is RdpConnection -> "RDP wird in der externen App getestet."
+                    is RdpConnection -> "RDP: mit „Öffnen“ verbinden."
                     is AiServerConnection -> {
                         val models = container.aiClient.listModels(d)
                         if (models.isEmpty()) "✓ Erreichbar, aber keine Modelle installiert"
@@ -531,10 +536,21 @@ private fun RdpFields(c: RdpConnection, update: (RdpConnection) -> Unit) {
         Box(Modifier.weight(1f)) { Field(c.port.toString(), "Port", number = true) { update(c.copy(port = it.filter(Char::isDigit).toIntOrNull() ?: 0)) } }
     }
     Field(c.username, "Benutzer (optional)") { update(c.copy(username = it.trim())) }
+    Field(c.password, "Passwort (optional)", password = true) { update(c.copy(password = it)) }
     Field(c.domain, "Domäne (optional)") { update(c.copy(domain = it.trim())) }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Switch(c.fitScreen, { update(c.copy(fitScreen = it)) }); Text("  An Bildschirm anpassen", style = MaterialTheme.typography.bodyMedium)
+    }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Switch(c.console, { update(c.copy(console = it)) }); Text("  Konsolen-Sitzung (/admin)", style = MaterialTheme.typography.bodyMedium)
+    }
+    val ctx = androidx.compose.ui.platform.LocalContext.current
     Text(
-        "Die Verbindung wird in einer installierten Remote-Desktop-App geöffnet (z. B. Microsoft „Windows App“). " +
-            "Das Passwort gibst du dort ein.",
+        if (app.devdeck.rdp.RdpLauncher.available(ctx))
+            "Der Remote Desktop öffnet direkt in dieser App. Ohne gespeichertes Passwort wirst du beim Verbinden gefragt. " +
+                "Das Passwort wird verschlüsselt auf dem Gerät gespeichert."
+        else "Auf diesem Gerät (Prozessor ${android.os.Build.SUPPORTED_ABIS.firstOrNull()}) ist das eingebaute RDP nicht verfügbar – " +
+            "die Verbindung wird in einer installierten Remote-Desktop-App geöffnet.",
         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
 }

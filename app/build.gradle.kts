@@ -89,6 +89,7 @@ android.sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("ge
 tasks.named("preBuild") { dependsOn(copyHub) }
 
 dependencies {
+    implementation(project(":freerdp"))
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs_nio:2.1.5")
     implementation(project(":core"))
 

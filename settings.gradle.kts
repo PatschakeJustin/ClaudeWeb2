@@ -39,4 +39,5 @@ include(":core")
 // (e.g. on machines without the SDK).
 if (System.getenv("SKIP_ANDROID") == null) {
     include(":app")
+    include(":freerdp")
 }

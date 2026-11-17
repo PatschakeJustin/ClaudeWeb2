@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Trimmed manifest of FreeRDP's Android core: only the session screen and the dialogs it opens. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+
+    <application>
+        <activity
+            android:exported="false"
+            android:name="com.freerdp.freerdpcore.presentation.SessionActivity"
+            android:theme="@style/Theme.Main"
+            android:configChanges="orientation|keyboard|keyboardHidden|screenSize|smallestScreenSize|density|screenLayout|navigation"
+            android:windowSoftInputMode="adjustResize" />
+        <activity
+            android:exported="false"
+            android:name="com.freerdp.freerdpcore.presentation.BookmarkActivity"
+            android:label="@string/title_bookmark_settings"
+            android:theme="@style/Theme.Settings" />
+        <activity
+            android:exported="false"
+            android:name="com.freerdp.freerdpcore.presentation.ApplicationSettingsActivity"
+            android:label="@string/title_application_settings"
+            android:theme="@style/Theme.Settings"
+            android:windowSoftInputMode="stateHidden" />
+        <activity
+            android:exported="false"
+            android:name="com.freerdp.freerdpcore.presentation.HelpActivity"
+            android:label="@string/title_help"
+            android:theme="@style/Theme.Main" />
+        <activity
+            android:exported="false"
+            android:name="com.freerdp.freerdpcore.presentation.AboutActivity"
+            android:label="@string/title_about"
+            android:theme="@style/Theme.Main" />
+    </application>
+</manifest>

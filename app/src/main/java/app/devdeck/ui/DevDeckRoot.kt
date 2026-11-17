@@ -130,7 +130,8 @@ fun DevDeckRoot() {
                                     alwaysShowLabel = false,
                                     onClick = { dest = d },
                                     icon = { Icon(d.icon, contentDescription = d.label) },
-                                    label = { Text(d.label, maxLines = 1, style = MaterialTheme.typography.labelSmall) },
+                                    label = { Text(d.label, maxLines = 1, softWrap = false, overflow = androidx.compose.ui.text.style.TextOverflow.Visible,
+                                        style = MaterialTheme.typography.labelSmall) },
                                 )
                             }
                         }

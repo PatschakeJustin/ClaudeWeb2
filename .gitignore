@@ -10,3 +10,4 @@ captures/
 !debug.keystore
 
 !app/signing/*.jks
+freerdp/src/main/jniLibs/
