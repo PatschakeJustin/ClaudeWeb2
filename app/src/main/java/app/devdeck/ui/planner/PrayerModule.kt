@@ -34,6 +34,7 @@ import java.time.format.DateTimeFormatter
 
 private val HHMM = DateTimeFormatter.ofPattern("HH:mm")
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun PrayerModule(repo: PlannerRepository, l: LifeData, today: LocalDate, tick: Long) {
     var tab by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(0) }
