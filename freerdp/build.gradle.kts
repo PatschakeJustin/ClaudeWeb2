@@ -11,7 +11,7 @@ val abis = listOf("arm64-v8a", "armeabi-v7a", "x86_64", "x86").filter { File(jni
 android {
     namespace = "com.freerdp.freerdpcore"
     compileSdk = 36
-    System.getenv("ANDROID_NDK_LATEST_HOME")?.let { ndkPath = it }
+    System.getenv("ANDROID_NDK_LATEST_HOME")?.let { ndkPath = it; ndkVersion = File(it).name }
 
     defaultConfig {
         minSdk = 24
