@@ -12,6 +12,8 @@ import app.devdeck.core.claudecode.CliAgentSession
 import app.devdeck.core.claudecode.ClaudeCodeSession
 import app.devdeck.core.ssh.SshManager
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.launch
 import app.devdeck.data.ConnectionsRepository
 import app.devdeck.data.KnownHostsRepository
 import app.devdeck.data.SecureStore
@@ -20,6 +22,7 @@ import app.devdeck.data.Updater
 import app.devdeck.data.ServerBackup
 import app.devdeck.data.HubSync
 import app.devdeck.data.WidgetRepository
+import app.devdeck.data.PlannerRepository
 import app.devdeck.data.WidgetRunner
 import app.devdeck.ui.terminal.TerminalViewModel
 import com.anthropic.client.AnthropicClient
@@ -73,6 +76,7 @@ data class TerminalRequest(
     val logins: List<LoginStep> = emptyList(),
 )
 
+@OptIn(kotlinx.coroutines.FlowPreview::class)
 class AppContainer(private val app: Application) {
     val appContext: android.content.Context get() = app
 
@@ -88,9 +92,22 @@ class AppContainer(private val app: Application) {
 
     // Declared after ssh/http/connections/settings: property initialisers run top to bottom.
     val widgets = WidgetRepository(secure)
-    val widgetRunner = WidgetRunner(ssh, { connections.state.value }, widgets)
+    val planner = PlannerRepository(secure)
+    val widgetRunner = WidgetRunner(ssh, { connections.state.value }, widgets, { planner.data.value })
     val hub = HubSync(secure, connections, settings, http, widgetsJson = { widgets.toJsonArray() }, applyWidgets = { widgets.applyJsonArray(it) },
-        changes = widgets.widgets)
+        changes = widgets.widgets, planner = planner)
+
+    init {
+        // Planner widgets follow planner changes (in the app and on the home screen).
+        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Default).launch {
+            kotlinx.coroutines.flow.combine(planner.data, widgets.widgets) { _, _ -> }.debounce(400).collect {
+                runCatching {
+                    widgetRunner.refreshPlanner()
+                    app.devdeck.widget.HomeWidgets.updateAll(app)
+                }
+            }
+        }
+    }
 
     /** Prompt handed to the chat by a "KI-Schnellfrage" widget. */
     val pendingPrompt = MutableStateFlow<String?>(null)

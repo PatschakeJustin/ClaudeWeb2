@@ -79,6 +79,7 @@ import java.util.concurrent.TimeUnit
 object HomeWidgets {
     private const val PREFS = "home_widgets"
     const val EXTRA_PROMPT = "app.devdeck.PROMPT"
+    const val EXTRA_OPEN_PLANNER = "app.devdeck.OPEN_PLANNER"
 
     fun binding(context: Context, appWidgetId: Int): String? =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString("w$appWidgetId", null)
@@ -113,7 +114,7 @@ class WidgetWorker(context: Context, params: WorkerParameters) : CoroutineWorker
         val now = System.currentTimeMillis()
         ids.mapNotNull { c.widgets.get(it) }
             .filter { it.kind != WidgetKind.AI }
-            .filter { w -> only != null || w.kind != WidgetKind.BUTTON && (c.widgets.results.value[w.id]?.at ?: 0) + w.refreshMinutes * 60_000L - 30_000 < now }
+            .filter { w -> only != null || w.kind.planner || w.kind != WidgetKind.BUTTON && (c.widgets.results.value[w.id]?.at ?: 0) + w.refreshMinutes * 60_000L - 30_000 < now }
             .forEach { c.widgetRunner.run(it) }
         HomeWidgets.updateAll(applicationContext)
         return Result.success()
@@ -152,6 +153,10 @@ private fun WidgetBody(context: Context, def: WidgetDef?, r: WidgetResult?) {
             Intent(context, MainActivity::class.java).putExtra(HomeWidgets.EXTRA_PROMPT, def.prompt)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
         )
+        def.kind.planner -> actionStartActivity(
+            Intent(context, MainActivity::class.java).putExtra(HomeWidgets.EXTRA_OPEN_PLANNER, true)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+        )
         else -> actionRunCallback<RefreshAction>(actionParametersOf(RefreshAction.DefKey to def.id))
     }
     Column(GlanceModifier.fillMaxSize().background(Bg).cornerRadius(18.dp).padding(12.dp).clickable(click)) {
@@ -164,8 +169,9 @@ private fun WidgetBody(context: Context, def: WidgetDef?, r: WidgetResult?) {
             def.kind == WidgetKind.BUTTON -> r?.text ?: "Tippen zum Ausführen"
             else -> r?.text ?: "Tippen zum Laden"
         }
-        Text(body, style = TextStyle(color = if (r != null && !r.ok) ColorProvider(Color(0xFFFF6E8F)) else Fg, fontSize = 11.sp,
-            fontFamily = FontFamily.Monospace), maxLines = 8)
+        Text(body, style = TextStyle(color = if (r != null && !r.ok) ColorProvider(Color(0xFFFF6E8F)) else Fg,
+            fontSize = if (def?.kind?.planner == true) 12.sp else 11.sp,
+            fontFamily = if (def?.kind?.planner == true) null else FontFamily.Monospace), maxLines = 9)
         Spacer(GlanceModifier.defaultWeight())
         Row {
             Text((r?.let { SimpleDateFormat("HH:mm", Locale.GERMANY).format(Date(it.at)) } ?: "") + "  ↻",

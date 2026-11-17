@@ -42,6 +42,7 @@ data class VaultPayload(
     val connections: ConnectionStore = ConnectionStore(),
     val settings: AppSettings? = null,
     val widgets: JsonArray = JsonArray(emptyList()),
+    val planner: app.devdeck.core.planner.PlannerData = app.devdeck.core.planner.PlannerData(),
 )
 
 /** Hub address + fingerprint learned from a server installation, used to pre-fill the login form. */
@@ -57,6 +58,7 @@ class HubSync(
     private val applyWidgets: (JsonArray) -> Unit = {},
     /** Further changes that should trigger a sync (e.g. the widget list). */
     private val changes: kotlinx.coroutines.flow.Flow<Any?> = kotlinx.coroutines.flow.flowOf(Unit),
+    private val planner: PlannerRepository? = null,
 ) {
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -76,7 +78,8 @@ class HubSync(
     init {
         @OptIn(FlowPreview::class)
         scope.launch {
-            combine(connections.state, settings.state, changes) { _, _, _ -> }.drop(1).debounce(2000).collect {
+            combine(connections.state, settings.state, changes, planner?.data ?: kotlinx.coroutines.flow.flowOf(Unit)) { _, _, _, _ -> }
+                .drop(1).debounce(2000).collect {
                 if (_account.value != null) runCatching { sync() }
             }
         }
@@ -96,6 +99,7 @@ class HubSync(
         connections = connections.state.value,
         settings = settings.state.value.copy(backupUri = null),
         widgets = widgetsJson(),
+        planner = planner?.data?.value ?: app.devdeck.core.planner.PlannerData(),
     ))
 
     /** Logs in (or registers) and merges the account's data with what is on this device. */
@@ -152,6 +156,7 @@ class HubSync(
         local.all.filter { l -> remote.connections.all.none { it.id == l.id } }.forEach { connections.save(it) }
         remote.settings?.let { r -> settings.update { cur -> r.copy(backupUri = cur.backupUri) } }
         if (remote.widgets.isNotEmpty()) applyWidgets(remote.widgets)
+        planner?.mergeRemote(remote.planner)
     }
 
     private fun done() {

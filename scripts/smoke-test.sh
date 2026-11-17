@@ -40,7 +40,7 @@ PY
 }
 
 i=2
-for name in ki-chat terminal dateien server einstellungen start; do
+for name in planer ki-chat terminal dateien server einstellungen start; do
   tap_text "$name"
   sleep 4
   shot "$i-$name"

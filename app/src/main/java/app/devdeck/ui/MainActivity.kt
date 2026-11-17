@@ -33,6 +33,10 @@ class MainActivity : ComponentActivity() {
 
     /** A "KI-Schnellfrage" home widget opens the chat with its prompt. */
     private fun handleWidgetIntent(intent: android.content.Intent?) {
+        if (intent?.getBooleanExtra(app.devdeck.widget.HomeWidgets.EXTRA_OPEN_PLANNER, false) == true) {
+            (application as DevDeckApp).container.navRequest.value = Dest.PLANNER
+            return
+        }
         val prompt = intent?.getStringExtra(app.devdeck.widget.HomeWidgets.EXTRA_PROMPT) ?: return
         val c = (application as DevDeckApp).container
         c.pendingPrompt.value = prompt

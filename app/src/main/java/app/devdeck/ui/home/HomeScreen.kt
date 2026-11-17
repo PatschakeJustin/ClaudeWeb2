@@ -136,7 +136,7 @@ fun HomeScreen(navigate: (Dest) -> Unit) {
                     WidgetCard(w, results[w.id], running[w.id] == true,
                         onRefresh = { refresh(w) },
                         onRun = { confirmRun = w },
-                        onAsk = { c.pendingPrompt.value = w.prompt; navigate(Dest.AGENT) },
+                        onAsk = { if (w.kind.planner) navigate(Dest.PLANNER) else { c.pendingPrompt.value = w.prompt; navigate(Dest.AGENT) } },
                         onEdit = { editing = w })
                 }
             }
@@ -170,7 +170,7 @@ private fun WidgetCard(
     Card(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
         modifier = Modifier.fillMaxWidth().heightIn(min = 130.dp).combinedClickable(
-            onClick = { when (w.kind) { WidgetKind.BUTTON -> onRun(); WidgetKind.AI -> onAsk(); else -> onRefresh() } },
+            onClick = { when { w.kind == WidgetKind.BUTTON -> onRun(); w.kind == WidgetKind.AI || w.kind.planner -> onAsk(); else -> onRefresh() } },
             onLongClick = onEdit,
         ),
     ) {
@@ -185,7 +185,7 @@ private fun WidgetCard(
             when (w.kind) {
                 WidgetKind.AI -> Text(w.prompt, style = MaterialTheme.typography.bodySmall, maxLines = 4, overflow = TextOverflow.Ellipsis)
                 WidgetKind.BUTTON -> Text(r?.text ?: "Tippen zum Ausführen", fontFamily = MonoFamily, fontSize = 11.sp, maxLines = 5)
-                else -> Text(r?.text ?: "Lädt …", fontFamily = MonoFamily, fontSize = 11.sp, lineHeight = 14.sp, maxLines = 6,
+                else -> Text(r?.text ?: "Lädt …", fontFamily = if (w.kind.planner) null else MonoFamily, fontSize = 11.sp, lineHeight = 14.sp, maxLines = 6,
                     overflow = TextOverflow.Ellipsis)
             }
             r?.let {
@@ -230,6 +230,20 @@ private fun WidgetEditor(c: AppContainer, initial: WidgetDef, isNew: Boolean, on
                     OutlinedTextField(w.command, { w = w.copy(command = it) }, label = { Text("Befehl") },
                         textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = MonoFamily), modifier = Modifier.fillMaxWidth())
                 }
+                if (w.kind == WidgetKind.NOTE) {
+                    val notes = c.planner.data.collectAsState().value.activeNotes()
+                    var noteMenu by remember { mutableStateOf(false) }
+                    if (notes.isEmpty()) Text("Lege zuerst im Planer unter „Notizen“ eine Notiz an.", style = MaterialTheme.typography.bodySmall)
+                    else Box {
+                        OutlinedButton(onClick = { noteMenu = true }) {
+                            Text("Notiz: " + (notes.firstOrNull { it.id == w.refId }?.let { it.title.ifBlank { it.text.take(20) } } ?: "wählen"))
+                        }
+                        DropdownMenu(noteMenu, onDismissRequest = { noteMenu = false }) {
+                            notes.forEach { n -> DropdownMenuItem(text = { Text(n.title.ifBlank { n.text.take(30) }) },
+                                onClick = { noteMenu = false; w = w.copy(refId = n.id, title = w.title.ifBlank { n.title }) }) }
+                        }
+                    }
+                }
                 if (w.kind == WidgetKind.AI) {
                     OutlinedTextField(w.prompt, { w = w.copy(prompt = it) }, label = { Text("Aufgabe für die KI") }, minLines = 2, modifier = Modifier.fillMaxWidth())
                 }
@@ -267,7 +281,7 @@ private fun WidgetEditor(c: AppContainer, initial: WidgetDef, isNew: Boolean, on
         confirmButton = {
             val valid = w.title.isNotBlank() && (!w.kind.needsServer || w.connectionId != null) &&
                 (w.kind != WidgetKind.COMMAND && w.kind != WidgetKind.BUTTON || w.command.isNotBlank()) &&
-                (w.kind != WidgetKind.AI || w.prompt.isNotBlank())
+                (w.kind != WidgetKind.AI || w.prompt.isNotBlank()) && (w.kind != WidgetKind.NOTE || w.refId != null)
             TextButton(enabled = valid, onClick = { c.widgets.save(w); onDismiss(); onSaved(w) }) { Text("Speichern") }
         },
         dismissButton = {

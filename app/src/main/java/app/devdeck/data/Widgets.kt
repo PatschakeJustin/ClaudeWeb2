@@ -4,6 +4,9 @@ import app.devdeck.core.claudecode.LOGIN_STATUS_SCRIPT
 import app.devdeck.core.claudecode.toolStatus
 import app.devdeck.core.model.ConnectionStore
 import app.devdeck.core.model.newId
+import app.devdeck.core.planner.PlannerData
+import app.devdeck.core.planner.PlannerText
+import java.time.LocalDate
 import app.devdeck.core.ssh.SshManager
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -19,13 +22,19 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
 
-/** Widget types. [needsServer] = runs something on an SSH server. */
-enum class WidgetKind(val label: String, val needsServer: Boolean, val description: String) {
+/** Widget types. [needsServer] = runs something on an SSH server; [planner] = computed locally from the planner. */
+enum class WidgetKind(val label: String, val needsServer: Boolean, val description: String, val planner: Boolean = false) {
     STATUS("Server-Status", true, "Last, RAM, Festplatte und Laufzeit"),
     COMMAND("Befehlsausgabe", true, "Zeigt die Ausgabe eines Befehls, regelmäßig aktualisiert"),
     BUTTON("Aktions-Knopf", true, "Führt per Tippen einen Befehl aus"),
     AI("KI-Schnellfrage", false, "Öffnet den Chat mit einer vorbereiteten Aufgabe"),
     LOGINS("Anmeldestatus", true, "Welche KI-Werkzeuge auf dem Server angemeldet sind"),
+    CALENDAR("Kalender", false, "Die nächsten Termine aus dem Planer", planner = true),
+    TODOS("Todos", false, "Offene Todos, wichtigste zuerst", planner = true),
+    WEEK("Wochenplan", false, "Was heute laut Wochenplan ansteht", planner = true),
+    HABITS("Gewohnheiten", false, "Heutige Gewohnheiten mit Serie", planner = true),
+    DEADLINES("Fristen", false, "Countdown bis zu deinen Fristen", planner = true),
+    NOTE("Notiz", false, "Zeigt eine Notiz aus dem Planer", planner = true),
 }
 
 @Serializable
@@ -40,6 +49,8 @@ data class WidgetDef(
     val color: Int = 0,
     /** Set when installed from the store. */
     val storeId: String? = null,
+    /** Planner item shown by a NOTE widget. */
+    val refId: String? = null,
 )
 
 @Serializable
@@ -90,7 +101,7 @@ class WidgetRepository(private val store: SecureStore) {
     // ---- store (hub) ----
     /** Shareable definition: no ids, no server binding. */
     fun storeDefinition(w: WidgetDef): JsonElement = json.encodeToJsonElement(WidgetDef.serializer(),
-        w.copy(id = "", connectionId = null, storeId = null)).jsonObject.let { JsonObject(it - "id" - "connectionId" - "storeId") }
+        w.copy(id = "", connectionId = null, storeId = null, refId = null)).jsonObject.let { JsonObject(it - "id" - "connectionId" - "storeId" - "refId") }
 
     fun fromStore(definition: JsonElement, storeId: String, connectionId: String?): WidgetDef? =
         runCatching { json.decodeFromJsonElement(WidgetDef.serializer(), definition) }.getOrNull()
@@ -103,11 +114,39 @@ class WidgetRepository(private val store: SecureStore) {
 }
 
 /** Evaluates widgets (runs their command on the server). */
-class WidgetRunner(private val ssh: SshManager, private val connections: () -> ConnectionStore, private val repo: WidgetRepository) {
+class WidgetRunner(
+    private val ssh: SshManager,
+    private val connections: () -> ConnectionStore,
+    private val repo: WidgetRepository,
+    private val planner: () -> PlannerData = { PlannerData() },
+) {
+    /** Text of a planner widget, computed locally. */
+    fun plannerText(w: WidgetDef): String {
+        val p = planner(); val today = LocalDate.now()
+        return when (w.kind) {
+            WidgetKind.CALENDAR -> PlannerText.upcoming(p, today)
+            WidgetKind.TODOS -> PlannerText.todos(p)
+            WidgetKind.WEEK -> PlannerText.weekToday(p, today)
+            WidgetKind.HABITS -> PlannerText.habits(p, today)
+            WidgetKind.DEADLINES -> PlannerText.deadlines(p, today)
+            WidgetKind.NOTE -> p.activeNotes().firstOrNull { it.id == w.refId }?.let { n -> listOf(n.title, n.text).filter { it.isNotBlank() }.joinToString("\n") }
+                ?: "Notiz nicht gefunden"
+            else -> ""
+        }
+    }
+
+    /** Recomputes all planner widgets (cheap, no network). */
+    fun refreshPlanner() {
+        repo.widgets.value.filter { it.kind.planner }.forEach { w ->
+            repo.setResult(w.id, WidgetResult(plannerText(w), true, System.currentTimeMillis()))
+        }
+    }
+
     suspend fun run(w: WidgetDef): WidgetResult {
         val result = try {
-            when (w.kind) {
-                WidgetKind.AI -> WidgetResult(w.prompt.take(200), true, System.currentTimeMillis())
+            when {
+                w.kind.planner -> WidgetResult(plannerText(w), true, System.currentTimeMillis())
+                w.kind == WidgetKind.AI -> WidgetResult(w.prompt.take(200), true, System.currentTimeMillis())
                 else -> {
                     val conn = connections().ssh.firstOrNull { it.id == w.connectionId }
                         ?: return WidgetResult("Kein Server gewählt", false, System.currentTimeMillis()).also { repo.setResult(w.id, it) }
