@@ -136,7 +136,7 @@ fun HomeScreen(navigate: (Dest) -> Unit) {
                     WidgetCard(w, results[w.id], running[w.id] == true,
                         onRefresh = { refresh(w) },
                         onRun = { confirmRun = w },
-                        onAsk = { if (w.kind.planner) navigate(Dest.PLANNER) else { c.pendingPrompt.value = w.prompt; navigate(Dest.AGENT) } },
+                        onAsk = { if (w.kind.planner) navigate(if (w.kind.life) Dest.LIFE else Dest.PLANNER) else { c.pendingPrompt.value = w.prompt; navigate(Dest.AGENT) } },
                         onEdit = { editing = w })
                 }
             }
@@ -213,9 +213,17 @@ private fun WidgetEditor(c: AppContainer, initial: WidgetDef, isNew: Boolean, on
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 OutlinedTextField(w.title, { w = w.copy(title = it) }, label = { Text("Titel") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                Text("Typ", style = MaterialTheme.typography.labelLarge)
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    WidgetKind.entries.forEach { k -> FilterChip(selected = w.kind == k, onClick = { w = w.copy(kind = k) }, label = { Text(k.label) }) }
+                listOf(
+                    "Server & KI" to WidgetKind.entries.filter { !it.planner },
+                    "Planer" to WidgetKind.entries.filter { it.planner && !it.life },
+                    "Alltag" to WidgetKind.entries.filter { it.life },
+                ).forEach { (group, kinds) ->
+                    Text(group, style = MaterialTheme.typography.labelLarge)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        kinds.forEach { k -> FilterChip(selected = w.kind == k, onClick = {
+                            w = w.copy(kind = k, title = if (w.title.isBlank() || WidgetKind.entries.any { it.label == w.title }) k.label else w.title)
+                        }, label = { Text(k.label) }) }
+                    }
                 }
                 Text(w.kind.description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 if (w.kind.needsServer) Box {

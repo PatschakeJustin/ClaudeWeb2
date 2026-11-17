@@ -30,7 +30,7 @@ tap_text() {
 import re, sys, xml.etree.ElementTree as ET
 want = sys.argv[2].lower()
 for n in ET.parse(sys.argv[1]).iter("node"):
-    if (n.get("text") or "").strip().lower() == want:
+    if want in ((n.get("text") or "").strip().lower(), (n.get("content-desc") or "").strip().lower()):
         x1, y1, x2, y2 = map(int, re.findall(r"\d+", n.get("bounds")))
         print((x1 + x2) // 2, (y1 + y2) // 2)
         break
@@ -40,7 +40,7 @@ PY
 }
 
 i=2
-for name in planer ki-chat terminal dateien server einstellungen start; do
+for name in planer alltag ki-chat terminal dateien server einstellungen start; do
   tap_text "$name"
   sleep 4
   shot "$i-$name"

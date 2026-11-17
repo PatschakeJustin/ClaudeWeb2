@@ -79,7 +79,8 @@ import java.util.concurrent.TimeUnit
 object HomeWidgets {
     private const val PREFS = "home_widgets"
     const val EXTRA_PROMPT = "app.devdeck.PROMPT"
-    const val EXTRA_OPEN_PLANNER = "app.devdeck.OPEN_PLANNER"
+    /** Name of a [app.devdeck.ui.Dest] to open. */
+    const val EXTRA_OPEN = "app.devdeck.OPEN"
 
     fun binding(context: Context, appWidgetId: Int): String? =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString("w$appWidgetId", null)
@@ -154,7 +155,7 @@ private fun WidgetBody(context: Context, def: WidgetDef?, r: WidgetResult?) {
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
         )
         def.kind.planner -> actionStartActivity(
-            Intent(context, MainActivity::class.java).putExtra(HomeWidgets.EXTRA_OPEN_PLANNER, true)
+            Intent(context, MainActivity::class.java).putExtra(HomeWidgets.EXTRA_OPEN, if (def.kind.life) "LIFE" else "PLANNER")
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
         )
         else -> actionRunCallback<RefreshAction>(actionParametersOf(RefreshAction.DefKey to def.id))

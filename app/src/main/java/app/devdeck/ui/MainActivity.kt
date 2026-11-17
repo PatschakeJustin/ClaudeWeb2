@@ -21,6 +21,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         handleWidgetIntent(intent)
         runCatching { app.devdeck.widget.HomeWidgets.schedule(this) }
+        runCatching { app.devdeck.widget.Reminders.schedule(this) }
         setContent {
             DevDeckTheme { DevDeckRoot() }
         }
@@ -33,8 +34,8 @@ class MainActivity : ComponentActivity() {
 
     /** A "KI-Schnellfrage" home widget opens the chat with its prompt. */
     private fun handleWidgetIntent(intent: android.content.Intent?) {
-        if (intent?.getBooleanExtra(app.devdeck.widget.HomeWidgets.EXTRA_OPEN_PLANNER, false) == true) {
-            (application as DevDeckApp).container.navRequest.value = Dest.PLANNER
+        intent?.getStringExtra(app.devdeck.widget.HomeWidgets.EXTRA_OPEN)?.let { name ->
+            Dest.entries.firstOrNull { it.name == name }?.let { (application as DevDeckApp).container.navRequest.value = it }
             return
         }
         val prompt = intent?.getStringExtra(app.devdeck.widget.HomeWidgets.EXTRA_PROMPT) ?: return

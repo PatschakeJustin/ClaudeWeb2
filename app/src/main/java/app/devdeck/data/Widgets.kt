@@ -23,7 +23,10 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
 
 /** Widget types. [needsServer] = runs something on an SSH server; [planner] = computed locally from the planner. */
-enum class WidgetKind(val label: String, val needsServer: Boolean, val description: String, val planner: Boolean = false) {
+enum class WidgetKind(
+    val label: String, val needsServer: Boolean, val description: String, val planner: Boolean = false,
+    /** Opens the "Alltag" screen when tapped. */ val life: Boolean = false,
+) {
     STATUS("Server-Status", true, "Last, RAM, Festplatte und Laufzeit"),
     COMMAND("Befehlsausgabe", true, "Zeigt die Ausgabe eines Befehls, regelmäßig aktualisiert"),
     BUTTON("Aktions-Knopf", true, "Führt per Tippen einen Befehl aus"),
@@ -35,6 +38,17 @@ enum class WidgetKind(val label: String, val needsServer: Boolean, val descripti
     HABITS("Gewohnheiten", false, "Heutige Gewohnheiten mit Serie", planner = true),
     DEADLINES("Fristen", false, "Countdown bis zu deinen Fristen", planner = true),
     NOTE("Notiz", false, "Zeigt eine Notiz aus dem Planer", planner = true),
+    BRIEFING("Tagesbriefing", false, "Termine, Todos, Geburtstage, Haushalt … auf einen Blick", planner = true, life = true),
+    SHOPPING("Einkaufsliste", false, "Was noch gekauft werden muss", planner = true, life = true),
+    BUDGET("Budget", false, "Ausgaben und Rest-Budget des Monats", planner = true, life = true),
+    MEALS("Essensplan", false, "Was es heute und morgen gibt", planner = true, life = true),
+    PANTRY("Vorräte", false, "Was bald abläuft", planner = true, life = true),
+    CONTRACTS("Verträge", false, "Fixkosten und Kündigungsfristen", planner = true, life = true),
+    HEALTH("Gesundheit", false, "Medikamente und Wasser heute", planner = true, life = true),
+    TIMER("Zeiterfassung", false, "Laufender Timer und Stunden", planner = true, life = true),
+    BIRTHDAYS("Geburtstage", false, "Kommende Geburtstage", planner = true, life = true),
+    CHORES("Haushalt", false, "Fällige Aufgaben und wer dran ist", planner = true, life = true),
+    JOURNAL("Tagebuch", false, "Heutiger Eintrag und „heute vor …“", planner = true, life = true),
 }
 
 @Serializable
@@ -129,6 +143,17 @@ class WidgetRunner(
             WidgetKind.WEEK -> PlannerText.weekToday(p, today)
             WidgetKind.HABITS -> PlannerText.habits(p, today)
             WidgetKind.DEADLINES -> PlannerText.deadlines(p, today)
+            WidgetKind.BRIEFING -> app.devdeck.core.planner.LifeText.briefing(p, today)
+            WidgetKind.SHOPPING -> app.devdeck.core.planner.LifeText.shopping(p.life)
+            WidgetKind.BUDGET -> app.devdeck.core.planner.LifeText.budget(p.life, today)
+            WidgetKind.MEALS -> app.devdeck.core.planner.LifeText.meals(p.life, today)
+            WidgetKind.PANTRY -> app.devdeck.core.planner.LifeText.pantry(p.life, today)
+            WidgetKind.CONTRACTS -> app.devdeck.core.planner.LifeText.contracts(p.life, today)
+            WidgetKind.HEALTH -> app.devdeck.core.planner.LifeText.health(p.life, today)
+            WidgetKind.TIMER -> app.devdeck.core.planner.LifeText.time(p.life, today)
+            WidgetKind.BIRTHDAYS -> app.devdeck.core.planner.LifeText.birthdays(p.life, today)
+            WidgetKind.CHORES -> app.devdeck.core.planner.LifeText.chores(p.life, today)
+            WidgetKind.JOURNAL -> app.devdeck.core.planner.LifeText.journal(p.life, today)
             WidgetKind.NOTE -> p.activeNotes().firstOrNull { it.id == w.refId }?.let { n -> listOf(n.title, n.text).filter { it.isNotBlank() }.joinToString("\n") }
                 ?: "Notiz nicht gefunden"
             else -> ""

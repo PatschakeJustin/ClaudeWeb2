@@ -23,6 +23,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.Cottage
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SmartToy
@@ -65,6 +66,7 @@ import app.devdeck.ui.terminal.TerminalScreen
 enum class Dest(val label: String, val icon: ImageVector) {
     HOME("Start", Icons.Filled.Dashboard),
     PLANNER("Planer", Icons.Filled.CalendarMonth),
+    LIFE("Alltag", Icons.Filled.Cottage),
     AGENT("KI-Chat", Icons.Filled.SmartToy),
     TERMINAL("Terminal", Icons.Filled.Terminal),
     FILES("Dateien", Icons.Filled.Folder),
@@ -125,6 +127,7 @@ fun DevDeckRoot() {
                             Dest.entries.forEach { d ->
                                 NavigationBarItem(
                                     selected = dest == d,
+                                    alwaysShowLabel = false,
                                     onClick = { dest = d },
                                     icon = { Icon(d.icon, contentDescription = d.label) },
                                     label = { Text(d.label, maxLines = 1, style = MaterialTheme.typography.labelSmall) },
@@ -148,6 +151,7 @@ private fun Content(dest: Dest, navigate: (Dest) -> Unit) {
         when (dest) {
             Dest.HOME -> app.devdeck.ui.home.HomeScreen(navigate)
             Dest.PLANNER -> app.devdeck.ui.planner.PlannerScreen()
+            Dest.LIFE -> app.devdeck.ui.planner.LifeScreen(navigate)
             Dest.AGENT -> AgentScreen(navigate)
             Dest.TERMINAL -> TerminalScreen(navigate)
             Dest.FILES -> FilesScreen(navigate)

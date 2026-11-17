@@ -98,13 +98,13 @@ private enum class PlannerTab(val label: String) {
     CALENDAR("Kalender"), TODOS("Todos"), WEEK("Woche"), HABITS("Gewohnheiten"), DEADLINES("Fristen"), NOTES("Notizen"), BOARD("Board")
 }
 
-private val DE = Locale.GERMANY
-private val DATE_DE = DateTimeFormatter.ofPattern("EEE, d. MMM yyyy", DE)
-private fun today(): LocalDate = LocalDate.now()
-private fun colorOf(i: Int) = WidgetColors[i.mod(WidgetColors.size)]
+internal val DE = Locale.GERMANY
+internal val DATE_DE = DateTimeFormatter.ofPattern("EEE, d. MMM yyyy", DE)
+internal fun today(): LocalDate = LocalDate.now()
+internal fun colorOf(i: Int) = WidgetColors[i.mod(WidgetColors.size)]
 
 /** Replaces the item with the same id or appends it. */
-private fun <T : PlannerItem> List<T>.upsert(item: T): List<T> =
+internal fun <T : PlannerItem> List<T>.upsert(item: T): List<T> =
     if (any { it.id == item.id }) map { if (it.id == item.id) item else it } else this + item
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -136,7 +136,7 @@ fun PlannerScreen() {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun DateField(label: String, date: String?, onChange: (String?) -> Unit, allowEmpty: Boolean = false) {
+internal fun DateField(label: String, date: String?, onChange: (String?) -> Unit, allowEmpty: Boolean = false) {
     var open by remember { mutableStateOf(false) }
     Row(verticalAlignment = Alignment.CenterVertically) {
         OutlinedButton(onClick = { open = true }) {
@@ -160,11 +160,11 @@ private fun DateField(label: String, date: String?, onChange: (String?) -> Unit,
     }
 }
 
-private val TIME = Regex("^([01]?\\d|2[0-3]):[0-5]\\d$")
-private fun normTime(s: String): String? = s.trim().takeIf { TIME.matches(it) }?.let { if (it.length == 4) "0$it" else it }
+internal val TIME = Regex("^([01]?\\d|2[0-3]):[0-5]\\d$")
+internal fun normTime(s: String): String? = s.trim().takeIf { TIME.matches(it) }?.let { if (it.length == 4) "0$it" else it }
 
 @Composable
-private fun TimeField(label: String, value: String, onChange: (String) -> Unit, modifier: Modifier = Modifier) {
+internal fun TimeField(label: String, value: String, onChange: (String) -> Unit, modifier: Modifier = Modifier) {
     OutlinedTextField(
         value, { onChange(it.filter { c -> c.isDigit() || c == ':' }.take(5)) }, label = { Text(label) }, singleLine = true,
         isError = value.isNotBlank() && normTime(value) == null, placeholder = { Text("08:30") }, modifier = modifier,
@@ -172,7 +172,7 @@ private fun TimeField(label: String, value: String, onChange: (String) -> Unit, 
 }
 
 @Composable
-private fun ColorPicker(selected: Int, onSelect: (Int) -> Unit) {
+internal fun ColorPicker(selected: Int, onSelect: (Int) -> Unit) {
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         WidgetColors.forEachIndexed { i, c ->
             Box(Modifier.size(if (selected == i) 30.dp else 24.dp).clip(CircleShape).background(c).clickable { onSelect(i) })
@@ -181,7 +181,7 @@ private fun ColorPicker(selected: Int, onSelect: (Int) -> Unit) {
 }
 
 @Composable
-private fun EditDialog(
+internal fun EditDialog(
     title: String, onDismiss: () -> Unit, onSave: (() -> Unit)?, onDelete: (() -> Unit)?, content: @Composable () -> Unit,
 ) {
     AlertDialog(
@@ -199,12 +199,12 @@ private fun EditDialog(
 }
 
 @Composable
-private fun AddFab(onClick: () -> Unit) = Box(Modifier.fillMaxSize()) {
+internal fun AddFab(onClick: () -> Unit) = Box(Modifier.fillMaxSize()) {
     FloatingActionButton(onClick = onClick, modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp)) { Icon(Icons.Filled.Add, "Hinzufügen") }
 }
 
 @Composable
-private fun Empty(text: String) = Text(text, Modifier.padding(24.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
+internal fun Empty(text: String) = Text(text, Modifier.padding(24.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
 
 // ---------------------------------------------------------------- calendar
 
