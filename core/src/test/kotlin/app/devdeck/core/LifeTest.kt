@@ -111,3 +111,33 @@ class LifeTest {
         assertEquals(LifeData(), old.life)
     }
 }
+
+class WeekPlanImportTest {
+    @Test fun parsesDaysRangesAndTimes() {
+        val (items, bad) = WeekPlanImport.parse("""
+            # Kommentar
+            Mo-Fr 07:10 Frühsport (bis 07:30)
+            Sa/So 7.20 Frühstück
+            Di Ausflug
+            Mi 08:00 Medikation
+            Quatsch ohne Tag
+        """.trimIndent())
+        assertEquals(listOf("Quatsch ohne Tag"), bad)
+        assertEquals(5 + 2 + 1 + 1, items.size)
+        assertEquals((1..5).toList(), items.filter { it.title.startsWith("Frühsport") }.map { it.weekday })
+        assertEquals(listOf("07:20", "07:20"), items.filter { it.title == "Frühstück" }.map { it.time })
+        assertEquals(null, items.single { it.title == "Ausflug" }.time)
+        assertEquals(2, items.single { it.title == "Medikation" }.color)
+    }
+
+    @Test fun includedTherapyPlanHasNo2bEntries() {
+        // Personal plan file (not in git) – only checked when present.
+        val f = java.io.File("../wochenplan-gruppe2a.txt")
+        if (!f.exists()) return
+        val text = f.readText()
+        val (items, bad) = WeekPlanImport.parse(text)
+        assertTrue(bad.isEmpty(), bad.toString())
+        assertTrue(items.none { "2B" in it.title })
+        assertTrue(items.size > 70, "${items.size}")
+    }
+}

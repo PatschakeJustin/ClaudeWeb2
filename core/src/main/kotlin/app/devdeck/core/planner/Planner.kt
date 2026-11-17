@@ -240,3 +240,53 @@ object PlannerText {
 
     @Suppress("unused") private val unused = DayOfWeek.MONDAY
 }
+
+/**
+ * Imports a weekly plan from simple text lines, e.g.
+ * "Mo 07:30 Frühstück", "Mo-Fr 07:10 Frühsport", "Sa/So 11:30 Mittagessen", "Di Ausflug" (no time).
+ * Lines starting with # and empty lines are ignored.
+ */
+object WeekPlanImport {
+    private val DAYS = listOf("mo", "di", "mi", "do", "fr", "sa", "so")
+    private val LINE = Regex("""^\s*([A-Za-zÄÖÜäöü]{2}(?:\s*[-/,+]\s*[A-Za-zÄÖÜäöü]{2})*)\s*:?\s+(?:(\d{1,2})[:.](\d{2})\s+)?(.+)$""")
+
+    private fun days(spec: String): List<Int>? {
+        val s = spec.lowercase().replace(" ", "")
+        val out = mutableListOf<Int>()
+        for (part in s.split(',', '/', '+')) {
+            if ('-' in part) {
+                val (a, b) = part.split('-').map { DAYS.indexOf(it.take(2)) }
+                if (a < 0 || b < 0) return null
+                var i = a; while (true) { out += i + 1; if (i == b) break; i = (i + 1) % 7 }
+            } else {
+                val i = DAYS.indexOf(part.take(2)); if (i < 0) return null; out += i + 1
+            }
+        }
+        return out.distinct()
+    }
+
+    /** Colour by kind of entry (index into the app's colour list). */
+    fun colorFor(title: String): Int {
+        val t = title.lowercase()
+        return when {
+            "medikation" in t -> 2
+            listOf("frühstück", "mittag", "abendessen", "kaffee").any { it in t } -> 3
+            listOf("therap", "training", "entspannung", "gespräch", "visite", "pantomime", "gruppe").any { it in t } -> 0
+            else -> 4
+        }
+    }
+
+    /** Parsed items and the lines that could not be read. */
+    fun parse(text: String): Pair<List<WeekItem>, List<String>> {
+        val items = mutableListOf<WeekItem>(); val bad = mutableListOf<String>()
+        text.lines().map { it.trim() }.filter { it.isNotEmpty() && !it.startsWith("#") }.forEach { line ->
+            val m = LINE.matchEntire(line); val d = m?.let { days(it.groupValues[1]) }
+            if (m == null || d == null) { bad += line; return@forEach }
+            val h = m.groupValues[2]; val min = m.groupValues[3]
+            val time = if (h.isEmpty()) null else "${h.padStart(2, '0')}:$min"
+            val title = m.groupValues[4].trim()
+            d.forEach { wd -> items += WeekItem(weekday = wd, time = time, title = title, color = colorFor(title)) }
+        }
+        return items to bad
+    }
+}

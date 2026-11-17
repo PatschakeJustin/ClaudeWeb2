@@ -369,6 +369,7 @@ private fun TodosTab(repo: PlannerRepository, data: PlannerData) {
 @Composable
 private fun WeekTab(repo: PlannerRepository, data: PlannerData) {
     var editing by remember { mutableStateOf<WeekItem?>(null) }
+    var importing by remember { mutableStateOf(false) }
     val todayWd = weekdayOf(today())
     Box(Modifier.fillMaxSize()) {
         LazyColumn(Modifier.fillMaxSize(), contentPadding = androidx.compose.foundation.layout.PaddingValues(12.dp, 8.dp, 12.dp, 80.dp)) {
@@ -393,8 +394,12 @@ private fun WeekTab(repo: PlannerRepository, data: PlannerData) {
                 }
             }
         }
+        Row(Modifier.align(Alignment.BottomStart).padding(16.dp)) {
+            androidx.compose.material3.ExtendedFloatingActionButton(onClick = { importing = true }) { Text("Importieren") }
+        }
         AddFab { editing = WeekItem(weekday = todayWd, title = "") }
     }
+    if (importing) WeekImportDialog(repo, data) { importing = false }
     editing?.let { orig ->
         var w by remember(orig.id) { mutableStateOf(orig) }
         var time by remember(orig.id) { mutableStateOf(orig.time.orEmpty()) }
@@ -629,4 +634,50 @@ private fun BoardTab(repo: PlannerRepository, data: PlannerData) {
         }
     }
 
+}
+
+
+/** Paste or load a weekly plan as text ("Mo 07:30 Frühstück", "Mo-Fr 07:10 Frühsport", "Sa/So …"). */
+@Composable
+private fun WeekImportDialog(repo: PlannerRepository, data: PlannerData, onDismiss: () -> Unit) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var text by remember { mutableStateOf("") }
+    var replace by remember { mutableStateOf(true) }
+    var skip by remember { mutableStateOf("") }
+    val picker = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) runCatching {
+            text = context.contentResolver.openInputStream(uri)!!.use { String(it.readBytes(), Charsets.UTF_8) }
+        }
+    }
+    val words = skip.split(',').map { it.trim() }.filter { it.isNotEmpty() }
+    val (parsed, bad) = remember(text) { app.devdeck.core.planner.WeekPlanImport.parse(text) }
+    val items = parsed.filter { item -> words.none { item.title.contains(it, ignoreCase = true) } }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Wochenplan importieren") },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Eine Zeile pro Termin: Tag(e) Uhrzeit Was – z. B. „Mo 07:30 Frühstück“, „Mo-Fr 07:10 Frühsport“, „Sa/So 11:30 Mittagessen“.",
+                    style = MaterialTheme.typography.bodySmall)
+                OutlinedButton(onClick = { picker.launch(arrayOf("text/*")) }) { Text("Textdatei wählen …") }
+                OutlinedTextField(text, { text = it }, label = { Text("…oder hier einfügen") }, minLines = 6, maxLines = 12, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(skip, { skip = it }, label = { Text("Ausblenden, wenn enthalten (z. B. Gr. 2B)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                Row(verticalAlignment = Alignment.CenterVertically) { Switch(replace, { replace = it }); Text("  Bisherigen Wochenplan ersetzen") }
+                Text("${items.size} Einträge erkannt" + if (bad.isNotEmpty()) ", ${bad.size} Zeilen nicht verstanden:" else "",
+                    style = MaterialTheme.typography.labelLarge)
+                bad.take(5).forEach { Text("• $it", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
+            }
+        },
+        confirmButton = {
+            TextButton(enabled = items.isNotEmpty(), onClick = {
+                repo.update { p ->
+                    val old = if (replace) p.week.map { if (it.deleted) it else it.copy(deleted = true, updatedAt = now()) } else p.week
+                    p.copy(week = old + items)
+                }
+                onDismiss()
+            }) { Text("Importieren") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Abbrechen") } },
+    )
 }

@@ -11,3 +11,4 @@ captures/
 
 !app/signing/*.jks
 freerdp/src/main/jniLibs/
+wochenplan-*.txt

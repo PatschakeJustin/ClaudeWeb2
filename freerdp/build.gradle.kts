@@ -47,7 +47,7 @@ val cleanJniLibs by tasks.registering(Copy::class) {
 tasks.named("preBuild") { dependsOn(cleanJniLibs) }
 
 dependencies {
-    implementation("androidx.appcompat:appcompat:1.7.0")
+    api("androidx.appcompat:appcompat:1.7.0")
     implementation("androidx.core:core:1.13.1")
     implementation("androidx.collection:collection:1.4.0")
 }
