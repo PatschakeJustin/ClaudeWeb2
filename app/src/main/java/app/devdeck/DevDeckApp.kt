@@ -24,6 +24,7 @@ import app.devdeck.data.HubSync
 import app.devdeck.data.WidgetRepository
 import app.devdeck.data.PlannerRepository
 import app.devdeck.data.WidgetRunner
+import app.devdeck.widget.HomeWidgets
 import app.devdeck.ui.terminal.TerminalViewModel
 import com.anthropic.client.AnthropicClient
 import com.anthropic.client.okhttp.AnthropicOkHttpClient
@@ -100,10 +101,10 @@ class AppContainer(private val app: Application) {
     init {
         // Planner widgets follow planner changes (in the app and on the home screen).
         kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Default).launch {
-            kotlinx.coroutines.flow.combine(planner.data, widgets.widgets) { _, _ -> }.debounce(400).collect {
+            kotlinx.coroutines.flow.combine(planner.data, widgets.widgets) { _, _ -> Unit }.debounce(400).collect {
                 runCatching {
                     widgetRunner.refreshPlanner()
-                    app.devdeck.widget.HomeWidgets.updateAll(app)
+                    HomeWidgets.updateAll(app)
                 }
             }
         }

@@ -146,6 +146,8 @@ data class PlannerData(
     val deadlines: List<Deadline> = emptyList(),
     val notes: List<Note> = emptyList(),
     val boards: List<Board> = emptyList(),
+    /** Alltags-Module (Einkauf, Ausgaben, Rezepte, …). */
+    val life: LifeData = LifeData(),
 ) {
     /**
      * Combines two copies (this device and the account): per item the newer change wins; deletions are kept
@@ -159,12 +161,13 @@ data class PlannerData(
         deadlines = mergeLists(deadlines, other.deadlines),
         notes = mergeLists(notes, other.notes),
         boards = mergeLists(boards, other.boards),
+        life = life.merge(other.life),
     )
 
     /** Removes tombstones older than [maxAgeMs] (default 90 days) to keep the data small. */
     fun pruned(nowMs: Long = now(), maxAgeMs: Long = 90L * 24 * 3600 * 1000): PlannerData {
         fun <T : PlannerItem> List<T>.p() = filter { !it.deleted || nowMs - it.updatedAt < maxAgeMs }
-        return PlannerData(events.p(), todos.p(), week.p(), habits.p(), deadlines.p(), notes.p(), boards.p())
+        return PlannerData(events.p(), todos.p(), week.p(), habits.p(), deadlines.p(), notes.p(), boards.p(), life.pruned(nowMs, maxAgeMs))
     }
 
     // ---- views (deleted items hidden) ----
@@ -186,7 +189,7 @@ data class PlannerData(
     fun activeBoards() = boards.filter { !it.deleted }
 }
 
-private fun <T : PlannerItem> mergeLists(a: List<T>, b: List<T>): List<T> {
+internal fun <T : PlannerItem> mergeLists(a: List<T>, b: List<T>): List<T> {
     val byId = LinkedHashMap<String, T>()
     (a + b).forEach { item ->
         val cur = byId[item.id]
