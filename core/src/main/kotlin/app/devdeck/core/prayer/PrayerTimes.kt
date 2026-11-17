@@ -192,3 +192,48 @@ object PlaceSearch {
         }
     }
 }
+
+/** Built-in places for when the online search is not reachable. */
+object OfflinePlaces {
+    private const val B = "Europe/Berlin"
+    private val raw = listOf(
+        "Berlin" to (52.520 to 13.405), "Hamburg" to (53.551 to 9.994), "München" to (48.137 to 11.575), "Köln" to (50.938 to 6.960),
+        "Frankfurt am Main" to (50.110 to 8.682), "Stuttgart" to (48.776 to 9.183), "Düsseldorf" to (51.228 to 6.774), "Leipzig" to (51.340 to 12.375),
+        "Dortmund" to (51.514 to 7.465), "Essen" to (51.456 to 7.012), "Bremen" to (53.079 to 8.802), "Dresden" to (51.050 to 13.738),
+        "Hannover" to (52.376 to 9.732), "Nürnberg" to (49.452 to 11.077), "Duisburg" to (51.435 to 6.763), "Bochum" to (51.481 to 7.216),
+        "Wuppertal" to (51.256 to 7.150), "Bielefeld" to (52.030 to 8.532), "Bonn" to (50.737 to 7.098), "Münster" to (51.961 to 7.626),
+        "Mannheim" to (49.488 to 8.466), "Karlsruhe" to (49.007 to 8.404), "Augsburg" to (48.371 to 10.898), "Wiesbaden" to (50.078 to 8.240),
+        "Mönchengladbach" to (51.185 to 6.442), "Gelsenkirchen" to (51.517 to 7.086), "Aachen" to (50.775 to 6.084), "Braunschweig" to (52.269 to 10.521),
+        "Kiel" to (54.323 to 10.123), "Chemnitz" to (50.828 to 12.921), "Halle (Saale)" to (51.482 to 11.970), "Magdeburg" to (52.121 to 11.628),
+        "Freiburg im Breisgau" to (47.999 to 7.842), "Krefeld" to (51.339 to 6.586), "Mainz" to (49.993 to 8.247), "Lübeck" to (53.866 to 10.687),
+        "Erfurt" to (50.978 to 11.029), "Oberhausen" to (51.470 to 6.852), "Rostock" to (54.092 to 12.099), "Kassel" to (51.313 to 9.480),
+        "Hagen" to (51.367 to 7.463), "Potsdam" to (52.391 to 13.064), "Saarbrücken" to (49.240 to 6.997), "Hamm" to (51.681 to 7.815),
+        "Ludwigshafen" to (49.477 to 8.445), "Oldenburg" to (53.144 to 8.214), "Osnabrück" to (52.279 to 8.047), "Leverkusen" to (51.046 to 7.019),
+        "Heidelberg" to (49.398 to 8.672), "Darmstadt" to (49.873 to 8.651), "Solingen" to (51.171 to 7.083), "Regensburg" to (49.013 to 12.102),
+        "Paderborn" to (51.719 to 8.754), "Ingolstadt" to (48.766 to 11.426), "Würzburg" to (49.792 to 9.953), "Ulm" to (48.401 to 9.988),
+        "Wolfsburg" to (52.423 to 10.787), "Göttingen" to (51.541 to 9.916), "Offenbach am Main" to (50.096 to 8.776), "Heilbronn" to (49.142 to 9.219),
+        "Pforzheim" to (48.892 to 8.695), "Bremerhaven" to (53.540 to 8.581), "Recklinghausen" to (51.614 to 7.197), "Bottrop" to (51.524 to 6.928),
+        "Trier" to (49.750 to 6.637), "Jena" to (50.927 to 11.586), "Siegen" to (50.875 to 8.024), "Cottbus" to (51.756 to 14.333),
+        "Schwerin" to (53.636 to 11.401), "Greifswald" to (54.097 to 13.387), "Stralsund" to (54.315 to 13.089), "Wismar" to (53.893 to 11.465),
+        "Neubrandenburg" to (53.557 to 13.261), "Flensburg" to (54.794 to 9.436), "Koblenz" to (50.356 to 7.589), "Gießen" to (50.584 to 8.678),
+    ).map { (n, c) -> PrayerPlace("$n, Deutschland", c.first, c.second, B) } + listOf(
+        PrayerPlace("Wien, Österreich", 48.208, 16.373, "Europe/Vienna"), PrayerPlace("Zürich, Schweiz", 47.377, 8.541, "Europe/Zurich"),
+        PrayerPlace("Basel, Schweiz", 47.560, 7.589, "Europe/Zurich"), PrayerPlace("Amsterdam, Niederlande", 52.370, 4.895, "Europe/Amsterdam"),
+        PrayerPlace("Brüssel, Belgien", 50.850, 4.352, "Europe/Brussels"), PrayerPlace("Paris, Frankreich", 48.857, 2.352, "Europe/Paris"),
+        PrayerPlace("London, Vereinigtes Königreich", 51.507, -0.128, "Europe/London"), PrayerPlace("Istanbul, Türkei", 41.008, 28.978, "Europe/Istanbul"),
+        PrayerPlace("Ankara, Türkei", 39.934, 32.860, "Europe/Istanbul"), PrayerPlace("Izmir, Türkei", 38.424, 27.143, "Europe/Istanbul"),
+        PrayerPlace("Sarajevo, Bosnien und Herzegowina", 43.856, 18.413, "Europe/Sarajevo"), PrayerPlace("Pristina, Kosovo", 42.663, 21.164, "Europe/Belgrade"),
+        PrayerPlace("Mekka, Saudi-Arabien", 21.4225, 39.8262, "Asia/Riyadh"), PrayerPlace("Medina, Saudi-Arabien", 24.467, 39.611, "Asia/Riyadh"),
+        PrayerPlace("Kairo, Ägypten", 30.044, 31.236, "Africa/Cairo"), PrayerPlace("Damaskus, Syrien", 33.513, 36.292, "Asia/Damascus"),
+        PrayerPlace("Beirut, Libanon", 33.894, 35.502, "Asia/Beirut"), PrayerPlace("Bagdad, Irak", 33.315, 44.366, "Asia/Baghdad"),
+        PrayerPlace("Erbil, Irak", 36.191, 44.009, "Asia/Baghdad"), PrayerPlace("Teheran, Iran", 35.689, 51.389, "Asia/Tehran"),
+        PrayerPlace("Kabul, Afghanistan", 34.555, 69.207, "Asia/Kabul"), PrayerPlace("Casablanca, Marokko", 33.573, -7.590, "Africa/Casablanca"),
+        PrayerPlace("Tunis, Tunesien", 36.806, 10.181, "Africa/Tunis"), PrayerPlace("Dubai, VAE", 25.205, 55.271, "Asia/Dubai"),
+    )
+
+    fun search(query: String): List<PrayerPlace> {
+        val q = query.trim().lowercase()
+        if (q.isEmpty()) return emptyList()
+        return raw.filter { it.name.lowercase().contains(q) }.sortedBy { if (it.name.lowercase().startsWith(q)) 0 else 1 }.take(10)
+    }
+}

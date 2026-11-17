@@ -63,13 +63,19 @@ internal fun PrayerModule(repo: PlannerRepository, l: LifeData, today: LocalDate
                         scope.launch {
                             try {
                                 results = withContext(Dispatchers.IO) { PlaceSearch.search(c.http, query) }
-                                if (results.isEmpty()) error = "Nichts gefunden."
-                            } catch (e: Exception) { error = "Suche fehlgeschlagen: ${e.message}" }
+                                if (results.isEmpty()) { results = OfflinePlaces.search(query); if (results.isEmpty()) error = "Nichts gefunden." }
+                            } catch (e: Exception) {
+                                // No internet / service not reachable: use the built-in list.
+                                results = OfflinePlaces.search(query)
+                                error = if (results.isEmpty()) "Online-Suche nicht erreichbar (${e.message}). Versuche eine größere Stadt in der Nähe."
+                                    else "Online-Suche nicht erreichbar – Treffer aus der eingebauten Städteliste:"
+                            }
                             searching = false
                         }
                     }) { if (searching) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp) else Icon(Icons.Filled.Search, "Suchen") }
                 }
-                error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+                error?.let { Text(it, color = if (results.isEmpty()) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodySmall) }
                 results.forEach { p ->
                     Text(p.name, Modifier.fillMaxWidth().clickable {
                         save(cfg.copy(place = p, notify = if (cfg.place == null) Prayer.entries.filter { it != Prayer.SUNRISE }.toSet() else cfg.notify))

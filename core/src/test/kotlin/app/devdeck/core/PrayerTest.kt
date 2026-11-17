@@ -88,3 +88,14 @@ class PrayerPlaceTest {
         assertTrue(text.startsWith("Köln · nächstes: Dhuhr"), text)
     }
 }
+
+class OfflinePlacesTest {
+    @Test fun findsRostockOffline() {
+        val r = OfflinePlaces.search("rostock")
+        assertEquals("Rostock, Deutschland", r.first().name)
+        assertTrue(OfflinePlaces.search("köln").isNotEmpty())
+        assertTrue(OfflinePlaces.search("").isEmpty())
+        // Every built-in zone must exist.
+        listOf("a", "e", "i", "o", "u").flatMap { OfflinePlaces.search(it) }.forEach { java.time.ZoneId.of(it.zone) }
+    }
+}
