@@ -1,6 +1,6 @@
 package app.devdeck.ui.planner
 
-import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -34,9 +34,29 @@ import java.time.format.DateTimeFormatter
 
 private val HHMM = DateTimeFormatter.ofPattern("HH:mm")
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun PrayerModule(repo: PlannerRepository, l: LifeData, today: LocalDate, tick: Long) {
+    var tab by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(0) }
+    Column(Modifier.fillMaxSize()) {
+        PrimaryTabRow(selectedTabIndex = tab) {
+            listOf("Zeiten", "Kompass", "Waschung", "Gebet").forEachIndexed { i, t -> Tab(tab == i, { tab = i }, text = { Text(t) }) }
+        }
+        Box(Modifier.weight(1f)) {
+            when (tab) {
+                0 -> PrayerTimesTab(repo, l, today, tick)
+                1 -> l.prayer?.place?.let { p ->
+                    Column(Modifier.fillMaxSize().verticalScroll(androidx.compose.foundation.rememberScrollState()).padding(12.dp)) { QiblaCompass(p) }
+                } ?: Text("Bitte zuerst unter „Zeiten“ deinen Ort wählen.", Modifier.padding(16.dp))
+                2 -> WuduGuide()
+                else -> SalahGuide()
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun PrayerTimesTab(repo: PlannerRepository, l: LifeData, today: LocalDate, tick: Long) {
     val c = appContainer()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -129,19 +149,9 @@ internal fun PrayerModule(repo: PlannerRepository, l: LifeData, today: LocalDate
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             }
 
-            SectionTitle("Qibla-Richtung")
             val q = PrayerCalc.qibla(place.latitude, place.longitude)
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                val color = MaterialTheme.colorScheme.primary; val ring = MaterialTheme.colorScheme.outlineVariant
-                Canvas(Modifier.size(90.dp)) {
-                    drawCircle(ring, style = androidx.compose.ui.graphics.drawscope.Stroke(3f))
-                    rotate(q.toFloat()) {
-                        drawLine(color, center, Offset(center.x, size.height * 0.08f), strokeWidth = 8f)
-                    }
-                }
-                Text("  ${"%.0f".format(q)}° von Norden (im Uhrzeigersinn).\n  Handy-Oberkante nach Norden halten,\n  der Strich zeigt Richtung Kaaba.",
-                    style = MaterialTheme.typography.bodySmall)
-            }
+            Text("Qibla: ${"%.0f".format(q)}° von Norden – live im Tab „Kompass“.", style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(top = 10.dp))
 
             SectionTitle("Berechnungsmethode")
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
