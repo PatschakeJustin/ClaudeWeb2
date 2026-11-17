@@ -262,6 +262,19 @@ data class JournalEntry(
     override val deleted: Boolean = false,
 ) : PlannerItem
 
+/** 11 – Gebetszeiten */
+@Serializable
+data class PrayerConfig(
+    val place: app.devdeck.core.prayer.PrayerPlace? = null,
+    val method: app.devdeck.core.prayer.PrayerMethod = app.devdeck.core.prayer.PrayerMethod.DIYANET,
+    val asr: app.devdeck.core.prayer.AsrMethod = app.devdeck.core.prayer.AsrMethod.STANDARD,
+    /** Prayers with a notification. */
+    val notify: Set<app.devdeck.core.prayer.Prayer> = emptySet(),
+    val updatedAt: Long = now(),
+) {
+    fun times(day: LocalDate) = place?.let { app.devdeck.core.prayer.PrayerCalc.times(day, it, method, asr) }
+}
+
 val MOODS = listOf("😞", "🙁", "😐", "🙂", "😄")
 
 @Serializable
@@ -279,18 +292,20 @@ data class LifeData(
     val people: List<Person> = emptyList(),
     val chores: List<Chore> = emptyList(),
     val journal: List<JournalEntry> = emptyList(),
+    val prayer: PrayerConfig? = null,
 ) {
     fun merge(o: LifeData) = LifeData(
         mergeLists(shopping, o.shopping), mergeLists(expenses, o.expenses), mergeLists(budgets, o.budgets),
         mergeLists(recipes, o.recipes), mergeLists(meals, o.meals), mergeLists(pantry, o.pantry),
         mergeLists(contracts, o.contracts), mergeLists(medications, o.medications), mergeLists(measurements, o.measurements),
         mergeLists(time, o.time), mergeLists(people, o.people), mergeLists(chores, o.chores), mergeLists(journal, o.journal),
+        prayer = listOfNotNull(prayer, o.prayer).maxByOrNull { it.updatedAt },
     )
 
     fun pruned(nowMs: Long, maxAgeMs: Long): LifeData {
         fun <T : PlannerItem> List<T>.p() = filter { !it.deleted || nowMs - it.updatedAt < maxAgeMs }
         return LifeData(shopping.p(), expenses.p(), budgets.p(), recipes.p(), meals.p(), pantry.p(), contracts.p(),
-            medications.p(), measurements.p(), time.p(), people.p(), chores.p(), journal.p())
+            medications.p(), measurements.p(), time.p(), people.p(), chores.p(), journal.p(), prayer)
     }
 
     // ---- 1 Einkauf
@@ -482,6 +497,17 @@ object LifeText {
         return head + past
     }
 
+    fun prayer(l: LifeData, now: java.time.LocalDateTime = java.time.LocalDateTime.now()): String {
+        val cfg = l.prayer ?: return "Ort für Gebetszeiten wählen"
+        val place = cfg.place ?: return "Ort für Gebetszeiten wählen"
+        val times = cfg.times(now.toLocalDate())!!
+        val (next, at) = app.devdeck.core.prayer.PrayerCalc.next(now, place, cfg.method, cfg.asr)
+        val mins = java.time.Duration.between(now, at).toMinutes()
+        val f = java.time.format.DateTimeFormatter.ofPattern("HH:mm")
+        return "${place.name.substringBefore(',')} · nächstes: ${next.label} ${at.format(f)} (in ${mins / 60}:${(mins % 60).toString().padStart(2, '0')})\n" +
+            times.entries.joinToString("\n") { (p, t) -> (if (p == next && t == at) "▶ " else "   ") + "${p.label}  ${t.format(f)}" }
+    }
+
     /** Morning briefing over everything. */
     fun briefing(p: PlannerData, today: LocalDate): String {
         val l = p.life
@@ -497,6 +523,11 @@ object LifeText {
         l.cancelSoon(today, 14).take(2).forEach { (c, d) -> parts += "📄 ${c.name}: noch $d T kündbar" }
         l.mealsOn(today).lastOrNull()?.let { parts += "🍽 ${l.mealTitle(it)}" }
         l.totalBudget()?.let { b -> parts += "💶 Budget übrig: ${euro(b - l.spent(YearMonth.from(today)))}" }
+        l.prayer?.times(today)?.let { t ->
+            val f = java.time.format.DateTimeFormatter.ofPattern("HH:mm")
+            parts += "🕌 " + listOf(app.devdeck.core.prayer.Prayer.FAJR, app.devdeck.core.prayer.Prayer.DHUHR, app.devdeck.core.prayer.Prayer.ASR,
+                app.devdeck.core.prayer.Prayer.MAGHRIB, app.devdeck.core.prayer.Prayer.ISHA).joinToString(" · ") { "${it.label} ${t.getValue(it).format(f)}" }
+        }
         return parts.joinToString("\n")
     }
 }

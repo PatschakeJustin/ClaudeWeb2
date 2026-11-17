@@ -22,6 +22,7 @@ class MainActivity : ComponentActivity() {
         handleWidgetIntent(intent)
         runCatching { app.devdeck.widget.HomeWidgets.schedule(this) }
         runCatching { app.devdeck.widget.Reminders.schedule(this) }
+        runCatching { app.devdeck.widget.PrayerAlarms.schedule(this) }
         setContent {
             DevDeckTheme { DevDeckRoot() }
         }
