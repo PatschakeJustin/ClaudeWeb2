@@ -116,8 +116,8 @@ class SshManager(
             }
             tOut.join(2_000); tErr.join(2_000)
             ExecResult(
-                stdout = truncate(out.toString(Charsets.UTF_8), maxOutputChars),
-                stderr = truncate(err.toString(Charsets.UTF_8), maxOutputChars),
+                stdout = truncate(String(out.toByteArray(), Charsets.UTF_8), maxOutputChars),
+                stderr = truncate(String(err.toByteArray(), Charsets.UTF_8), maxOutputChars),
                 exitCode = cmd.exitStatus,
                 timedOut = timedOut,
             )
