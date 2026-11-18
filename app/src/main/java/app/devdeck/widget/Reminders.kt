@@ -54,6 +54,20 @@ object Reminders {
             if (!now.isBefore(at.minusMinutes(30)) && now.isBefore(at))
                 out += Reminder("event:${e.id}:$today", "📅 ${e.title}", "Um ${e.start}", dest = "PLANNER")
         }
+        // Sleep: caffeine stop, wind-down before bedtime, morning check-in.
+        l.sleepConfig?.let { sc ->
+            fun t(s: String) = runCatching { LocalTime.parse(s) }.getOrNull()
+            t(sc.caffeineCutoff)?.let { at -> if (!now.isBefore(at) && now.isBefore(at.plusMinutes(30)))
+                out += Reminder("sleep-caffeine:$today", "☕ Koffein-Stopp", "Ab jetzt lieber nichts Anregendes mehr – Wasser oder Kräutertee.") }
+            t(sc.targetBed)?.let { bed -> if (sc.windDownMinutes > 0) {
+                val at = bed.minusMinutes(sc.windDownMinutes.toLong())
+                if (!now.isBefore(at) && now.isBefore(at.plusMinutes(30)))
+                    out += Reminder("sleep-winddown:$today", "🌙 Zeit zum Runterfahren", "Um ${sc.targetBed} ins Bett. Jetzt Bildschirme weg, Zimmer lüften, Abendritual.")
+            } }
+            t(sc.targetWake)?.let { wake -> val at = wake.plusMinutes(30)
+                if (!now.isBefore(at) && now.isBefore(at.plusHours(3)) && l.sleepOn(today) == null)
+                    out += Reminder("sleep-morning:$today", "😴 Wie hast du geschlafen?", "Kurz ins Schlaftagebuch eintragen.") }
+        }
         if (now.isBefore(LocalTime.of(8, 0))) return out
         l.upcomingBirthdays(today, 1).forEach { (person, d) ->
             out += Reminder("bday:${person.id}:$today", if (d == 0L) "🎂 ${person.name} hat heute Geburtstag" else "🎁 Morgen: ${person.name}",

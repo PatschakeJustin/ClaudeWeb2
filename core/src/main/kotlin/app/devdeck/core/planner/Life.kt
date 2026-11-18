@@ -275,6 +275,83 @@ data class PrayerConfig(
     fun times(day: LocalDate) = place?.let { app.devdeck.core.prayer.PrayerCalc.times(day, it, method, asr) }
 }
 
+/** 12 – Schlaf: one entry per night, filed under the date of waking up. */
+@Serializable
+data class SleepEntry(
+    override val id: String = newPlannerId(),
+    /** Date of the morning (yyyy-MM-dd). */
+    val date: String,
+    /** "HH:mm" */
+    val bed: String,
+    val wake: String,
+    /** Minutes until falling asleep (estimate). */
+    val latency: Int = 0,
+    val wakeups: Int = 0,
+    /** 1 (schlecht) … 5 (sehr gut) */
+    val quality: Int = 3,
+    /** Evening routine items that were kept (ids from SLEEP_CHECKS). */
+    val checks: Set<String> = emptySet(),
+    val note: String = "",
+    override val updatedAt: Long = now(),
+    override val deleted: Boolean = false,
+) : PlannerItem {
+    /** Time in bed in minutes (over midnight). */
+    fun inBedMinutes(): Int {
+        val b = java.time.LocalTime.parse(bed); val w = java.time.LocalTime.parse(wake)
+        val m = java.time.Duration.between(b, w).toMinutes().toInt()
+        return if (m <= 0) m + 24 * 60 else m
+    }
+    /** Estimated sleep: time in bed minus time to fall asleep. */
+    fun sleepMinutes() = (inBedMinutes() - latency).coerceAtLeast(0)
+}
+
+@Serializable
+data class SleepConfig(
+    val targetBed: String = "22:30",
+    val targetWake: String = "06:30",
+    /** No caffeine after this time. */
+    val caffeineCutoff: String = "15:00",
+    /** Reminder to wind down this many minutes before bedtime (0 = off). */
+    val windDownMinutes: Int = 60,
+    val updatedAt: Long = now(),
+)
+
+/** Evening routine checklist (own wording of common sleep-hygiene advice). */
+val SLEEP_CHECKS = listOf(
+    "regular" to "Zu meiner festen Zeit ins Bett / aufgestanden",
+    "caffeine" to "Nachmittags/abends kein Kaffee, Cola, Energy oder schwarzer Tee",
+    "alcohol" to "Kein Alkohol als Einschlafhilfe",
+    "meal" to "Weder hungrig noch übervoll ins Bett",
+    "drink" to "Abends nur noch wenig getrunken",
+    "air" to "Schlafzimmer gelüftet, angenehm kühl und ruhig",
+    "winddown" to "Ruhiger Abend / Abendritual",
+    "nonap" to "Nicht vor dem Fernseher eingenickt",
+    "bedonly" to "Bett nur zum Schlafen (kein Handy, TV, Lesen im Bett)",
+    "notes" to "Gedanken für morgen aufgeschrieben",
+)
+
+/** Short tips, one per day (paraphrased sleep-hygiene rules). */
+val SLEEP_TIPS = listOf(
+    "Halte deine Aktivitäten bei – Treffen, Ausgehen, Hobbys. Richte den Tag nicht nach dem schlechten Schlaf aus.",
+    "Feste Zeiten fürs Zubettgehen und Aufstehen stabilisieren deinen Schlaf-Wach-Rhythmus – auch am Wochenende.",
+    "Geh ins Bett, wenn du müde bist – nicht nur, weil die Uhr es sagt.",
+    "Kannst du nicht einschlafen? Steh lieber auf und mach etwas Ruhiges. Erst wenn du wieder müde wirst, zurück ins Bett.",
+    "Nicht vor dem Fernseher einnicken – das baut den Schlafdruck ab, der dir später beim Einschlafen fehlt.",
+    "Das Bett ist zum Schlafen da. Lesen, Radio, Fernsehen und Handy besser woanders.",
+    "Lüfte das Schlafzimmer vor dem Zubettgehen gut durch.",
+    "Angenehme Bedingungen: nicht zu warm, nicht zu kalt, ruhig und eine gute Matratze.",
+    "Eine volle Blase weckt nachts am häufigsten. Trink abends weniger – aber nicht gar nichts, sonst weckt dich der Durst.",
+    "Weder hungrig noch mit übervollem Magen ins Bett gehen.",
+    "Kaffee, Cola, Energy Drinks und schwarzer Tee können am Abend wach halten – achte darauf, wie sie bei dir wirken.",
+    "Alkohol lässt schneller einschlafen, aber du wachst öfter auf und schläfst flacher. Kein Alkohol als Schlafmittel.",
+    "Gestalte den Abend entspannt, um vom Tag abzuschalten.",
+    "Feste Rituale helfen: ein kurzer Spaziergang, eine ruhige Viertelstunde auf dem Balkon, Lesen im Sessel.",
+    "Belastendes vom Tag nicht im Bett durchgehen – lieber vorher mit geschlossenen Augen im Sessel.",
+    "Leichte Bewegung und Entspannungsübungen (z. B. autogenes Training, Atemübungen) erleichtern das Einschlafen.",
+    "Ein warmes Bad, eine Wechseldusche oder ein warmes Fußbad können beim Umschalten in den Schlaf helfen.",
+    "Grübelst du nachts über Aufgaben? Schreib sie auf – dann darf der Kopf sie loslassen.",
+)
+
 val MOODS = listOf("😞", "🙁", "😐", "🙂", "😄")
 
 @Serializable
@@ -293,6 +370,8 @@ data class LifeData(
     val chores: List<Chore> = emptyList(),
     val journal: List<JournalEntry> = emptyList(),
     val prayer: PrayerConfig? = null,
+    val sleep: List<SleepEntry> = emptyList(),
+    val sleepConfig: SleepConfig? = null,
 ) {
     fun merge(o: LifeData) = LifeData(
         mergeLists(shopping, o.shopping), mergeLists(expenses, o.expenses), mergeLists(budgets, o.budgets),
@@ -300,12 +379,14 @@ data class LifeData(
         mergeLists(contracts, o.contracts), mergeLists(medications, o.medications), mergeLists(measurements, o.measurements),
         mergeLists(time, o.time), mergeLists(people, o.people), mergeLists(chores, o.chores), mergeLists(journal, o.journal),
         prayer = listOfNotNull(prayer, o.prayer).maxByOrNull { it.updatedAt },
+        sleep = mergeLists(sleep, o.sleep),
+        sleepConfig = listOfNotNull(sleepConfig, o.sleepConfig).maxByOrNull { it.updatedAt },
     )
 
     fun pruned(nowMs: Long, maxAgeMs: Long): LifeData {
         fun <T : PlannerItem> List<T>.p() = filter { !it.deleted || nowMs - it.updatedAt < maxAgeMs }
         return LifeData(shopping.p(), expenses.p(), budgets.p(), recipes.p(), meals.p(), pantry.p(), contracts.p(),
-            medications.p(), measurements.p(), time.p(), people.p(), chores.p(), journal.p(), prayer)
+            medications.p(), measurements.p(), time.p(), people.p(), chores.p(), journal.p(), prayer, sleep.p(), sleepConfig)
     }
 
     // ---- 1 Einkauf
@@ -393,6 +474,24 @@ data class LifeData(
     // ---- 9 Haushalt
     fun activeChores(today: LocalDate) = chores.filter { !it.deleted }.sortedBy { it.daysLeft(today) }
     fun choresDue(today: LocalDate) = activeChores(today).filter { it.daysLeft(today) <= 0 }
+
+    // ---- 12 Schlaf
+    fun activeSleep() = sleep.filter { !it.deleted }.sortedByDescending { it.date }
+    fun lastSleep() = activeSleep().firstOrNull()
+    fun sleepOn(day: LocalDate) = sleep.firstOrNull { !it.deleted && it.date == day.toString() }
+    /** Average sleep minutes over the last [days] nights, null if none. */
+    fun sleepAverage(today: LocalDate, days: Long) = activeSleep().filter { LocalDate.parse(it.date) > today.minusDays(days) }
+        .takeIf { it.isNotEmpty() }?.map { it.sleepMinutes() }?.average()?.toLong()
+    /** How much the bedtime varies (standard deviation in minutes) over the last 14 nights; smaller = more regular. */
+    fun bedtimeSpread(today: LocalDate): Int? {
+        val mins = activeSleep().filter { LocalDate.parse(it.date) > today.minusDays(14) }.map {
+            val t = java.time.LocalTime.parse(it.bed); val m = t.hour * 60 + t.minute
+            if (m < 12 * 60) m + 24 * 60 else m // after midnight counts as late evening
+        }
+        if (mins.size < 3) return null
+        val mean = mins.average()
+        return kotlin.math.sqrt(mins.map { (it - mean) * (it - mean) }.average()).toInt()
+    }
 
     // ---- 10 Tagebuch
     fun journalOn(day: LocalDate) = journal.firstOrNull { !it.deleted && it.date == day.toString() }
@@ -508,6 +607,20 @@ object LifeText {
             times.entries.joinToString("\n") { (p, t) -> (if (p == next && t == at) "▶ " else "   ") + "${p.label}  ${t.format(f)}" }
     }
 
+    fun sleepTip(today: LocalDate) = SLEEP_TIPS[(today.toEpochDay() % SLEEP_TIPS.size).toInt()]
+
+    fun sleep(l: LifeData, today: LocalDate): String {
+        val last = l.lastSleep()
+        val avg = l.sleepAverage(today, 7)
+        val cfg = l.sleepConfig ?: SleepConfig()
+        return buildString {
+            append(last?.let { "Letzte Nacht: ${formatDuration(it.sleepMinutes() * 60_000L)} · ${MOODS[(it.quality - 1).coerceIn(0, 4)]}" } ?: "Noch keine Nacht eingetragen")
+            avg?.let { append("\nØ 7 Tage: ${formatDuration(it * 60_000L)}") }
+            append("\nZiel: ${cfg.targetBed} – ${cfg.targetWake}")
+            append("\n💡 ").append(sleepTip(today))
+        }
+    }
+
     /** Morning briefing over everything. */
     fun briefing(p: PlannerData, today: LocalDate): String {
         val l = p.life
@@ -522,6 +635,8 @@ object LifeText {
         l.expiringSoon(today, 1).take(3).forEach { parts += "🥫 ${it.name} läuft ab" }
         l.cancelSoon(today, 14).take(2).forEach { (c, d) -> parts += "📄 ${c.name}: noch $d T kündbar" }
         l.mealsOn(today).lastOrNull()?.let { parts += "🍽 ${l.mealTitle(it)}" }
+        l.sleepOn(today)?.let { parts += "😴 Geschlafen: ${formatDuration(it.sleepMinutes() * 60_000L)}" }
+        l.sleepConfig?.let { parts += "🛏 Heute ins Bett: ${it.targetBed}" }
         l.totalBudget()?.let { b -> parts += "💶 Budget übrig: ${euro(b - l.spent(YearMonth.from(today)))}" }
         l.prayer?.times(today)?.let { t ->
             val f = java.time.format.DateTimeFormatter.ofPattern("HH:mm")

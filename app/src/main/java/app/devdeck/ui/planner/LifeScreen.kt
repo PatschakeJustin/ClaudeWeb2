@@ -43,6 +43,7 @@ import java.time.format.TextStyle as JTextStyle
 enum class LifeModule(val label: String, val icon: ImageVector) {
     BRIEFING("Tagesbriefing", Icons.Filled.WbSunny),
     PRAYER("Gebetszeiten", Icons.Filled.Brightness3),
+    SLEEP("Schlaf", Icons.Filled.Bedtime),
     SHOPPING("Einkauf", Icons.Filled.ShoppingCart),
     MONEY("Haushaltsbuch", Icons.Filled.Euro),
     FOOD("Rezepte & Essen", Icons.Filled.Restaurant),
@@ -58,6 +59,7 @@ enum class LifeModule(val label: String, val icon: ImageVector) {
 fun lifePreview(m: LifeModule, p: PlannerData, today: LocalDate): String = when (m) {
     LifeModule.BRIEFING -> LifeText.briefing(p, today)
     LifeModule.PRAYER -> LifeText.prayer(p.life)
+    LifeModule.SLEEP -> LifeText.sleep(p.life, today)
     LifeModule.SHOPPING -> LifeText.shopping(p.life, 5)
     LifeModule.MONEY -> LifeText.budget(p.life, today)
     LifeModule.FOOD -> LifeText.meals(p.life, today)
@@ -135,6 +137,7 @@ fun LifeScreen(navigate: (Dest) -> Unit) {
             when (module) {
                 LifeModule.BRIEFING -> BriefingModule(data, today, navigate)
                 LifeModule.PRAYER -> PrayerModule(c.planner, data.life, today, tick)
+                LifeModule.SLEEP -> SleepModule(c.planner, data.life, today)
                 LifeModule.SHOPPING -> ShoppingModule(c.planner, data.life)
                 LifeModule.MONEY -> MoneyModule(c.planner, data.life, today)
                 LifeModule.FOOD -> FoodModule(c.planner, data.life, today)

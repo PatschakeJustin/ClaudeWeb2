@@ -141,3 +141,19 @@ class WeekPlanImportTest {
         assertTrue(items.size > 70, "${items.size}")
     }
 }
+
+class SleepTest {
+    private val today = java.time.LocalDate.of(2026, 11, 18)
+    @Test fun durationsOverMidnightAndAverages() {
+        val a = SleepEntry(date = "2026-11-18", bed = "23:00", wake = "06:30", latency = 30)
+        assertEquals(450, a.inBedMinutes()); assertEquals(420, a.sleepMinutes())
+        val b = SleepEntry(date = "2026-11-17", bed = "00:30", wake = "07:00")
+        assertEquals(390, b.inBedMinutes())
+        val l = LifeData(sleep = listOf(a, b, SleepEntry(date = "2026-11-16", bed = "22:30", wake = "06:30")))
+        assertEquals((420 + 390 + 480) / 3L, l.sleepAverage(today, 7))
+        assertEquals(a.id, l.lastSleep()!!.id)
+        assertTrue(l.bedtimeSpread(today)!! in 30..50, "${l.bedtimeSpread(today)}")
+        assertTrue(LifeText.sleep(l, today).startsWith("Letzte Nacht: 7:00 h"))
+        assertTrue(SLEEP_TIPS.size >= 18)
+    }
+}

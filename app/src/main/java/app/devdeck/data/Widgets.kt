@@ -40,6 +40,7 @@ enum class WidgetKind(
     NOTE("Notiz", false, "Zeigt eine Notiz aus dem Planer", planner = true),
     BRIEFING("Tagesbriefing", false, "Termine, Todos, Geburtstage, Haushalt … auf einen Blick", planner = true, life = true),
     PRAYER("Gebetszeiten", false, "Nächstes Gebet und die Zeiten von heute", planner = true, life = true),
+    SLEEP("Schlaf", false, "Letzte Nacht, Durchschnitt und Schlaftipp des Tages", planner = true, life = true),
     SHOPPING("Einkaufsliste", false, "Was noch gekauft werden muss", planner = true, life = true),
     BUDGET("Budget", false, "Ausgaben und Rest-Budget des Monats", planner = true, life = true),
     MEALS("Essensplan", false, "Was es heute und morgen gibt", planner = true, life = true),
@@ -146,6 +147,7 @@ class WidgetRunner(
             WidgetKind.DEADLINES -> PlannerText.deadlines(p, today)
             WidgetKind.BRIEFING -> app.devdeck.core.planner.LifeText.briefing(p, today)
             WidgetKind.PRAYER -> app.devdeck.core.planner.LifeText.prayer(p.life)
+            WidgetKind.SLEEP -> app.devdeck.core.planner.LifeText.sleep(p.life, today)
             WidgetKind.SHOPPING -> app.devdeck.core.planner.LifeText.shopping(p.life)
             WidgetKind.BUDGET -> app.devdeck.core.planner.LifeText.budget(p.life, today)
             WidgetKind.MEALS -> app.devdeck.core.planner.LifeText.meals(p.life, today)
