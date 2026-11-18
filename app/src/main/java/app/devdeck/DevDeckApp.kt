@@ -25,6 +25,7 @@ import app.devdeck.data.WidgetRepository
 import app.devdeck.data.PlannerRepository
 import app.devdeck.data.WidgetRunner
 import app.devdeck.widget.HomeWidgets
+import app.devdeck.ui.browser.BrowserState
 import app.devdeck.ui.terminal.TerminalViewModel
 import com.anthropic.client.AnthropicClient
 import com.anthropic.client.okhttp.AnthropicOkHttpClient
@@ -121,7 +122,7 @@ class AppContainer(private val app: Application) {
     fun newSelfHostedSession(aiId: String) = SelfHostedSession(aiClient) { connections.state.value.ai.firstOrNull { it.id == aiId } }
 
     /** Browser tabs live as long as the app process, like the terminal. */
-    val browser by lazy { app.devdeck.ui.browser.BrowserState(app) }
+    val browser: BrowserState by lazy { BrowserState(app) }
 
     /** The terminal session lives as long as the app process (not tied to a screen). */
     val terminal: TerminalViewModel by lazy { TerminalViewModel(this, app) }
