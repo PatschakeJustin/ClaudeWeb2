@@ -157,3 +157,16 @@ class SleepTest {
         assertTrue(SLEEP_TIPS.size >= 18)
     }
 }
+
+class AddressBarTest {
+    @Test fun urlsAndSearches() {
+        assertEquals("https://example.com", AddressBar.toUrl("example.com"))
+        assertEquals("https://de.wikipedia.org/wiki/Rostock", AddressBar.toUrl("de.wikipedia.org/wiki/Rostock"))
+        assertEquals("http://192.168.1.10:8080", AddressBar.toUrl("192.168.1.10:8080"))
+        assertEquals("https://müller.de", AddressBar.toUrl("müller.de"))
+        assertEquals("http://x.y", AddressBar.toUrl("http://x.y"))
+        assertEquals("https://duckduckgo.com/?q=wetter+rostock", AddressBar.toUrl("wetter rostock"))
+        assertEquals("https://www.google.com/search?q=kotlin", AddressBar.toUrl("kotlin", AddressBar.Engine.GOOGLE))
+        assertEquals("about:blank", AddressBar.toUrl("  "))
+    }
+}

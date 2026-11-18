@@ -120,6 +120,9 @@ class AppContainer(private val app: Application) {
 
     fun newSelfHostedSession(aiId: String) = SelfHostedSession(aiClient) { connections.state.value.ai.firstOrNull { it.id == aiId } }
 
+    /** Browser tabs live as long as the app process, like the terminal. */
+    val browser by lazy { app.devdeck.ui.browser.BrowserState(app) }
+
     /** The terminal session lives as long as the app process (not tied to a screen). */
     val terminal: TerminalViewModel by lazy { TerminalViewModel(this, app) }
 

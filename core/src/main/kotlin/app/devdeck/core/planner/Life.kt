@@ -275,6 +275,40 @@ data class PrayerConfig(
     fun times(day: LocalDate) = place?.let { app.devdeck.core.prayer.PrayerCalc.times(day, it, method, asr) }
 }
 
+/** Browser bookmark (synced with the account). */
+@Serializable
+data class Bookmark(
+    override val id: String = newPlannerId(),
+    val title: String,
+    val url: String,
+    override val updatedAt: Long = now(),
+    override val deleted: Boolean = false,
+) : PlannerItem
+
+/** Turns what was typed into the address bar into a URL: a web address as is, anything else as a search. */
+object AddressBar {
+    enum class Engine(val label: String, val pattern: String) {
+        DUCKDUCKGO("DuckDuckGo", "https://duckduckgo.com/?q=%s"),
+        GOOGLE("Google", "https://www.google.com/search?q=%s"),
+        STARTPAGE("Startpage", "https://www.startpage.com/do/search?q=%s"),
+        ECOSIA("Ecosia", "https://www.ecosia.org/search?q=%s"),
+    }
+
+    private val SCHEME = Regex("^[a-zA-Z][a-zA-Z0-9+.-]*://")
+    private val HOST = Regex("^(localhost|\\d{1,3}(\\.\\d{1,3}){3}|[\\p{L}0-9-]+(\\.[\\p{L}0-9-]+)*\\.[\\p{L}]{2,})(:\\d+)?(/.*)?$")
+
+    fun toUrl(input: String, engine: Engine = Engine.DUCKDUCKGO): String {
+        val t = input.trim()
+        if (t.isEmpty()) return "about:blank"
+        if (SCHEME.containsMatchIn(t) || t.startsWith("about:")) return t
+        if (!t.contains(' ') && HOST.matches(t)) {
+            val local = t.startsWith("localhost") || Regex("^(10|127|192\\.168|172\\.(1[6-9]|2\\d|3[01]))\\.").containsMatchIn(t)
+            return (if (local) "http://" else "https://") + t
+        }
+        return engine.pattern.format(java.net.URLEncoder.encode(t, "UTF-8"))
+    }
+}
+
 /** 12 – Schlaf: one entry per night, filed under the date of waking up. */
 @Serializable
 data class SleepEntry(
@@ -372,6 +406,7 @@ data class LifeData(
     val prayer: PrayerConfig? = null,
     val sleep: List<SleepEntry> = emptyList(),
     val sleepConfig: SleepConfig? = null,
+    val bookmarks: List<Bookmark> = emptyList(),
 ) {
     fun merge(o: LifeData) = LifeData(
         mergeLists(shopping, o.shopping), mergeLists(expenses, o.expenses), mergeLists(budgets, o.budgets),
@@ -381,12 +416,13 @@ data class LifeData(
         prayer = listOfNotNull(prayer, o.prayer).maxByOrNull { it.updatedAt },
         sleep = mergeLists(sleep, o.sleep),
         sleepConfig = listOfNotNull(sleepConfig, o.sleepConfig).maxByOrNull { it.updatedAt },
+        bookmarks = mergeLists(bookmarks, o.bookmarks),
     )
 
     fun pruned(nowMs: Long, maxAgeMs: Long): LifeData {
         fun <T : PlannerItem> List<T>.p() = filter { !it.deleted || nowMs - it.updatedAt < maxAgeMs }
         return LifeData(shopping.p(), expenses.p(), budgets.p(), recipes.p(), meals.p(), pantry.p(), contracts.p(),
-            medications.p(), measurements.p(), time.p(), people.p(), chores.p(), journal.p(), prayer, sleep.p(), sleepConfig)
+            medications.p(), measurements.p(), time.p(), people.p(), chores.p(), journal.p(), prayer, sleep.p(), sleepConfig, bookmarks.p())
     }
 
     // ---- 1 Einkauf

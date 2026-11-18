@@ -28,6 +28,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Storefront
+import androidx.compose.material.icons.filled.Public
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -109,6 +110,7 @@ fun HomeScreen(navigate: (Dest) -> Unit) {
             TopAppBar(
                 title = { Text("Start") },
                 actions = {
+                    IconButton(onClick = { navigate(Dest.BROWSER) }) { Icon(Icons.Filled.Public, "Browser") }
                     IconButton(onClick = { storeOpen = true }) { Icon(Icons.Filled.Storefront, "Widget-Store") }
                     IconButton(onClick = { widgets.forEach { refresh(it) } }) { Icon(Icons.Filled.Refresh, "Alle aktualisieren") }
                 },

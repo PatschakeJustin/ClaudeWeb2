@@ -52,6 +52,9 @@ data class AppSettings(
     val backupUri: String? = null,
     /** Run terminal sessions inside tmux on the server so they survive disconnects. */
     val terminalTmux: Boolean = true,
+    val browserEngine: String = "DUCKDUCKGO",
+    val browserHome: String = "",
+    val browserDesktop: Boolean = false
 ) {
     companion object {
         const val MODE_CLAUDE_CODE = "claude_code"

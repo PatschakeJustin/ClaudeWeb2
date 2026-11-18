@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Cottage
+import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SmartToy
@@ -63,7 +64,7 @@ import app.devdeck.ui.files.FilesScreen
 import app.devdeck.ui.settings.SettingsScreen
 import app.devdeck.ui.terminal.TerminalScreen
 
-enum class Dest(val label: String, val icon: ImageVector) {
+enum class Dest(val label: String, val icon: ImageVector, val inNav: Boolean = true) {
     HOME("Start", Icons.Filled.Dashboard),
     PLANNER("Planer", Icons.Filled.CalendarMonth),
     LIFE("Alltag", Icons.Filled.Cottage),
@@ -72,6 +73,8 @@ enum class Dest(val label: String, val icon: ImageVector) {
     FILES("Dateien", Icons.Filled.Folder),
     CONNECTIONS("Server", Icons.Filled.Dns),
     SETTINGS("Einstellungen", Icons.Filled.Settings),
+    /** Opened from Start / Alltag, full screen. */
+    BROWSER("Browser", Icons.Filled.Public, inNav = false),
 }
 
 /** True on tablets / unfolded foldables / landscape phones wide enough for two panes. */
@@ -105,7 +108,7 @@ fun DevDeckRoot() {
                                 Spacer(Modifier.height(8.dp))
                             },
                         ) {
-                            Dest.entries.forEach { d ->
+                            Dest.entries.filter { it.inNav }.forEach { d ->
                                 NavigationRailItem(
                                     selected = dest == d,
                                     onClick = { dest = d },
@@ -124,7 +127,7 @@ fun DevDeckRoot() {
                     bottomBar = {
                         // While typing the keyboard needs the space.
                         if (!imeVisible) NavigationBar(containerColor = MaterialTheme.colorScheme.surfaceContainerLow) {
-                            Dest.entries.forEach { d ->
+                            Dest.entries.filter { it.inNav }.forEach { d ->
                                 NavigationBarItem(
                                     selected = dest == d,
                                     alwaysShowLabel = false,
@@ -153,6 +156,7 @@ private fun Content(dest: Dest, navigate: (Dest) -> Unit) {
             Dest.HOME -> app.devdeck.ui.home.HomeScreen(navigate)
             Dest.PLANNER -> app.devdeck.ui.planner.PlannerScreen()
             Dest.LIFE -> app.devdeck.ui.planner.LifeScreen(navigate)
+            Dest.BROWSER -> app.devdeck.ui.browser.BrowserScreen { navigate(Dest.HOME) }
             Dest.AGENT -> AgentScreen(navigate)
             Dest.TERMINAL -> TerminalScreen(navigate)
             Dest.FILES -> FilesScreen(navigate)
